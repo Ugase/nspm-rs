@@ -1,6 +1,6 @@
 ## nspm
 
-nspm stands for 'not shit password manager'
+nspm stands for 'not shit password manager'  
 nspm is the reboot of spm (shitpasswordmanager)
 
 
