@@ -1,10 +1,11 @@
 from os import get_terminal_size
 
+import rich.table
+from rich import print as printt
+
 import storage
 import ui
 from encrypt import check_hash
-
-terminal = get_terminal_size()
 
 print("Welcome to nspm!")
 new = True
@@ -30,7 +31,8 @@ choices = [
     "2. Add password",
     "3. Edit password",
     "4. Remove password",
-    "5. Save and quit",
+    "5. Generate password",
+    "6. Save and quit",
 ]
 
 
@@ -43,19 +45,21 @@ while True:
     list_option()
     try:
         user = int(input("> "))
-        if user > 5 or user <= 0:
+        if user > 6 or user <= 0:
             continue
     except:
         continue
     if user == 1:
-        print("Service" + " " * (terminal.columns - 15) + "Passwords")
-        for service, password in zip(list(state.values()), list(state.keys())):
-            space = " " * (terminal.columns - (len(service) + len(password)))
-            print(service + space + password)
+        out = rich.table.Table(title="Passwords", show_lines=True, expand=True)
+        out.add_column("Service")
+        out.add_column("Password")
+        for service, password in zip(list(state.keys()), list(state.values())):
+            out.add_row(service, password)
+        printt(out)
     if user == 2:
         service = input("Service: ")
         password = ui.new_password_prompt("Password: ")
-        state = storage.create_password(service, password, state)
+        state = storage.create_password(password, service, state)
         print("Added pasword")
     if user == 3:
         index = input("Service: ")
@@ -67,6 +71,39 @@ while True:
         state.pop(service)
         print(f"Successfully removed {service}")
     if user == 5:
+        length_of_password = input("Length of generated password (default 14): ")
+        try:
+            length_of_password = int(length_of_password)
+            if length_of_password < 0:
+                length_of_password = 14
+        except:
+            length_of_password = 14
+        generated_password = storage.generator(length_of_password)
+        print(f"Generated password: {generated_password}")
+        confirmation = input("Do you want to save this password (y/n)? ")
+        if confirmation.lower() in [
+            "y",
+            "yes",
+            "ye",
+            "yahoo",
+            "yes i want to save this password to be able to access it again later",
+            "save",
+            "ok",
+            "k",
+            "sure",
+            "fine",
+            "finally",
+            "just save",
+            "es",
+            "s",
+            "se",
+        ]:
+            service = input("Service: ")
+            state = storage.create_password(generated_password, service, state)
+            print("Saved")
+        else:
+            continue
+    if user == 6:
         print("Saving...")
         storage.save(state, directory, master_password)
         exit(0)

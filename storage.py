@@ -1,5 +1,6 @@
 import os
-from string import punctuation
+from secrets import choice
+from string import ascii_letters, digits, punctuation
 
 import encrypt
 
@@ -67,13 +68,15 @@ def verify_directory(directory_name: str):
 
 def get_salts(directory_name: str):
     with open(f"{directory_name}/salts", "rb") as salts:
-        return salts.read().split("\n".encode())
+        s = salts.read().split("\n".encode())
+        del s[-1]
+        return s
 
 
 def get_passwords(directory_name: str) -> list:
     with open(f"{directory_name}/passwords", "rb") as passwords:
         p = passwords.read().split("\n".encode())
-        print(p,type(p),p[0],type(p[0]))
+        del p[-1]
         return p
 
 
@@ -98,7 +101,6 @@ def encrypt_passwords(
         t.truncate()
     for password in passwords:
         e = encrypt.encrypt(master_password, password, salt_loc)
-        print(e, type(e))
         yield e
     # return encrypted_passwords
 
@@ -123,5 +125,13 @@ def save(state: dict, directory_location: str, master_password: str):
 def load(directory_name: str, master_password: str):
     services = open(f"{directory_name}/services").read().split("\n")
     passwords = get_passwords(directory_name)
+    del services[-1]
     s = merge(services, passwords)
     return decrypt_passwords(master_password, s, get_salts(directory_name))
+
+
+def generator(num_of_chr: int) -> str:
+    """Generates a random list of numbers, letters and symbols"""
+    sbol_list = digits + ascii_letters + punctuation
+    result = "".join(choice(sbol_list) for _ in range(num_of_chr))
+    return result

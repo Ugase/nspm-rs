@@ -5,6 +5,9 @@ from os import urandom
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from rich.traceback import install
+
+install(show_locals=True)
 
 
 def hash(string: str):
@@ -33,8 +36,8 @@ def encrypt(master_password: str, password: str, salt_loc: str):
 
 def decrypt(master_password: str, encrypted: bytes, salt: bytes):
     kdf = PBKDF2HMAC(
-        algorithm=hashes.SHA256(), length=32, salt=salt, iterations=480_000
+        algorithm=hashes.SHA3_512(), length=32, salt=salt, iterations=480_000
     )
     key = urlsafe_b64encode(kdf.derive(master_password.encode()))
     f = Fernet(key)
-    return f.decrypt(encrypted)
+    return f.decrypt(encrypted).decode()
