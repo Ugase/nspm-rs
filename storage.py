@@ -32,21 +32,20 @@ def tps(password: str):
 
 def cmp(master_password: str, file_name: str):
     """(C)reate (M)aster (P)assword"""
+    salt = os.urandom(32)
     try:
         with open(file_name, "wb") as file:
-            file.write(encrypt.hash(master_password))
+            file.write(encrypt.hash(master_password, salt))
+            file.write("\n".encode())
+            file.write(salt)
     except Exception as e:
         print(e)
         return 1
 
 
 def gemp(file_name: str):
-    try:
-        with open(file_name, "rb") as file:
-            return file.read()
-    except Exception as e:
-        print(e)
-        return b""
+    with open(file_name, "rb") as file:
+        return file.read().split("\n".encode())
 
 
 def init_dir(directory_name: str, master_password: str):

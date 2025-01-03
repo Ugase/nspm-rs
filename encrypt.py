@@ -9,12 +9,14 @@ from rich.traceback import install
 
 install(show_locals=True, extra_lines=50, code_width=150)
 
-def hash(string: str):
-    return sha512(string.encode("utf-8")).digest()
+
+def hash(string: str, salt: bytes):
+    final = string.encode() + salt
+    return sha512(final).digest()
 
 
-def check_hash(string: str, digest_hash: bytes):
-    return hash(string) == digest_hash
+def check_hash(string: str, digest_hash: bytes, salt: bytes):
+    return hash(string, salt) == digest_hash
 
 
 def encrypt(master_password: str, password: str, salt_loc: str):

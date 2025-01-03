@@ -1,5 +1,3 @@
-from os import get_terminal_size
-
 import rich.table
 from rich import print as printt
 
@@ -15,7 +13,7 @@ if not master_password:
     master_password_hash = storage.gemp(f"{directory}/master_password")
     for _ in range(3):
         master = ui.password_prompt("Master password: ")
-        if check_hash(master, master_password_hash):
+        if check_hash(master, master_password_hash[0], master_password_hash[1]):
             master_password = master
             break
     if not master_password:

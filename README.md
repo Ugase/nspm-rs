@@ -5,7 +5,7 @@ nspm is the reboot of spm (shitpasswordmanager)
 
 
 ### how it's better (or worse)
-- uses hashing for storing the master password
+- uses hashing with salting (kinda) for storing the master password
 - better password storing (not really)
 - actually structured directories so you don't have to make copies of the program
 - better interface
