@@ -1,5 +1,5 @@
 from base64 import urlsafe_b64encode
-from hashlib import sha3_256 as sha512
+from hashlib import sha3_512 as sha512
 from os import urandom
 
 from cryptography.fernet import Fernet
@@ -7,8 +7,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from rich.traceback import install
 
-install(show_locals=True)
-
+install(show_locals=True, extra_lines=50, code_width=150)
 
 def hash(string: str):
     return sha512(string.encode("utf-8")).digest()
