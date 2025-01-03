@@ -14,7 +14,7 @@ def hash(string: str):
 
 
 def check_hash(string: str, digest_hash: bytes):
-    return sha512(string.encode("utf-8")).digest() == digest_hash
+    return hash(string) == digest_hash
 
 
 def encrypt(master_password: str, password: str, salt_loc: str):
