@@ -30,6 +30,12 @@ choose: choose {dirname}
 
 
 def dir_selector(string: str, dir_color="\033[1;94m"):
+    """
+    Directory selector, Only accepts directories as the arguments for choose (see the help by using the command ? for more info)
+    args:
+        string: the prompt that is displayed for the use subsitutes %P for the current working directory and %% for %
+        dir_color: A SGR ansi escape code for the color of the directory when listing
+    """
     print("\033[94mTip: Type ? for help!\033[0m")
     dire = path
     while True:
@@ -115,14 +121,6 @@ def warning_checker(output_of_tps: list[int]):
         yield error_wrapper(status, error=status < 0)
 
 
-def fullscreen():
-    print(smcup)
-
-
-def unfullscreen():
-    print(rmcup)
-
-
 def new_password_prompt(pprompt: str, mask="*"):
     count = 0
     password_input = b""
@@ -160,7 +158,7 @@ def new_password_prompt(pprompt: str, mask="*"):
             for warning in warning_checker(storage.tps(password_input.decode())):
                 print(f"{warning}")
     password = password_input.decode()
-    unfullscreen()
+    print(cursor)
     return password
 
 
@@ -195,5 +193,5 @@ def password_prompt(pprompt: str, mask="*"):
             print(pprompt, end="")
             print((mask * count), end="", flush=True)
     password = password_input.decode()
-    unfullscreen()
+    print(cursor)
     return password
