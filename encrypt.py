@@ -28,7 +28,7 @@ def encrypt(master_password: str, password: str, salt_loc: str):
         algorithm=hashes.SHA3_512(),
         length=32,
         salt=salt,
-        iterations=480_000,
+        iterations=1_480_000,
     )
     key = urlsafe_b64encode(kdf.derive(master_password.encode()))
     f = Fernet(key)
@@ -37,7 +37,7 @@ def encrypt(master_password: str, password: str, salt_loc: str):
 
 def decrypt(master_password: str, encrypted: bytes, salt: bytes):
     kdf = PBKDF2HMAC(
-        algorithm=hashes.SHA3_512(), length=32, salt=salt, iterations=480_000
+        algorithm=hashes.SHA3_512(), length=32, salt=salt, iterations=1_480_000
     )
     key = urlsafe_b64encode(kdf.derive(master_password.encode()))
     f = Fernet(key)
