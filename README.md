@@ -12,9 +12,7 @@ nspm is the reboot of spm (shitpasswordmanager)
 - You don't have to make passwords that are divisable by 32
 - Removed redundent "Get password" option
 - better with generated password
-
-### how it's worse
-- there's a problem that i don't know how to fix
+- works (for now)
 
 #### todo:
 - make gui

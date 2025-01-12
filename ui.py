@@ -55,11 +55,7 @@ def dir_selector(string: str, dir_color="\033[1;94m"):
             )
         if command == "choose":
             file_name = command_input
-            if (
-                file_name in listdir()
-                and dire.isdir(file_name)
-                and storage.verify_directory(file_name)
-            ):
+            if dire.isdir(file_name) and storage.verify_directory(file_name):
                 return [f"{getcwd()}/{file_name}", ""]
             print(
                 "\033[31;3mError: directory doesn't exist or is a file or the chosen directory doesn't have the sufficient files\033[0m"

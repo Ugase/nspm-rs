@@ -10,7 +10,7 @@ new = True
 directory, master_password = ui.dir_selector(ui.propmt)
 if not master_password:
     new = False
-    master_password_hash = storage.gemp(f"{directory}/master_password")
+    master_password_hash = storage.get_master_password(f"{directory}/master_password")
     for _ in range(3):
         master = ui.password_prompt("Master password: ")
         if check_hash(master, master_password_hash[0], master_password_hash[1]):

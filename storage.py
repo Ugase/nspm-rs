@@ -32,47 +32,55 @@ def tps(password: str):
 
 def cmp(master_password: str, file_name: str):
     """(C)reate (M)aster (P)assword"""
-    salt = os.urandom(32)
-    try:
-        with open(file_name, "wb") as file:
-            file.write(encrypt.hash(master_password, salt))
-            file.write("\n".encode())
-            file.write(salt)
-    except Exception as e:
-        print(e)
-        return 1
+    salt = os.urandom(256)
+    with open(file_name, "wb") as file:
+        file.write(encrypt.hash(master_password, salt))
+    with open(f"{file_name}_salt", "wb") as msalt:
+        msalt.write(salt)
 
 
-def gemp(file_name: str):
+def get_master_password(file_name: str):
     with open(file_name, "rb") as file:
-        return file.read().split("\n".encode())
+        master_password = file.read()
+    with open(f"{file_name}_salt", "rb") as salt:
+        master_password_salt = salt.read()
+    return master_password, master_password_salt
 
 
 def init_dir(directory_name: str, master_password: str):
     os.mkdir(directory_name)
-    passw = f"./{directory_name}/passwords"
-    os.system(f"touch ./{directory_name}/salts")
-    os.system(f"touch {passw}")
+    os.mkdir(f"{directory_name}/salts")
+    os.system(f"touch ./{directory_name}/passwords")
     os.system(f"touch ./{directory_name}/master_password")
     os.system(f"touch ./{directory_name}/services")
     cmp(master_password, f"./{directory_name}/master_password")
 
 
 def verify_directory(directory_name: str):
-    for i in ["salts", "passwords", "master_password", "services"]:
-        if not os.path.isfile(os.path.join(directory_name, i)):
+    for i in [
+        "salts",
+        "passwords",
+        "master_password",
+        "master_password_salt",
+        "services",
+    ]:
+        if i == "salts" and not os.path.isdir(os.path.join(directory_name, i)):
+            return False
+        elif not os.path.isfile(os.path.join(directory_name, i)) and i != "salts":
             return False
     return True
 
 
 def get_salts(directory_name: str):
-    with open(f"{directory_name}/salts", "rb") as salts:
-        s = salts.read().split("\n".encode())
-        del s[-1]
-        return s
+    salts: list[bytes] = []
+    salt_amount = os.listdir(f"{directory_name}/salts").__len__()
+    for i in range(salt_amount):
+        with open(f"{directory_name}/salts/salt_{i}", "rb") as salt:
+            salts.append(salt.read())
+    return salts
 
 
-def get_passwords(directory_name: str) -> list:
+def get_passwords(directory_name: str) -> list[bytes]:
     with open(f"{directory_name}/passwords", "rb") as passwords:
         p = passwords.read().split("\n".encode())
         del p[-1]
@@ -92,16 +100,12 @@ def decrypt_passwords(master_password: str, passwords: dict, salts: list[bytes])
 
 def encrypt_passwords(
     master_password: str,
-    passwords: list,
+    passwords: list[str],
     salt_loc: str,
 ):
-    # encrypted_passwords = []
-    with open(salt_loc, "wb") as t:
-        t.truncate()
-    for password in passwords:
-        e = encrypt.encrypt(master_password, password, salt_loc)
+    for password, salt_num in zip(passwords, range(passwords.__len__())):
+        e = encrypt.encrypt(master_password, password, salt_loc + f"/salt_{salt_num}")
         yield e
-    # return encrypted_passwords
 
 
 def create_password(password: str, service: str, state: dict):
