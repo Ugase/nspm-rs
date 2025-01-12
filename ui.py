@@ -5,9 +5,7 @@ import getch
 
 import storage
 
-smcup = "\033[7\033[?47h"
-rmcup = "\033[2J\033[?47l\0338"
-cursor = "\033[H\033[2J\033[3J"
+clear = "\033[H\033[2J\033[3J"
 r = readline
 help_message = """
 There are a total of 7 commands (which have alaises):
@@ -27,9 +25,14 @@ Commands with no arguments: ls, exit, clear, help, new
 cd: cd {dirname}
 choose: choose {dirname}
 """
+# Colors:
+WARNING = "\033[3;33m"
+DONE = "\033[3;32m"
+NORMAL = "\033[0m"
+DIRCOLOR = "\033[1;94m"
 
 
-def dir_selector(string: str, dir_color="\033[1;94m"):
+def dir_selector(string: str, dir_color=DIRCOLOR):
     """
     Directory selector, Only accepts directories as the arguments for choose (see the help by using the command ? for more info)
     args:
@@ -75,7 +78,7 @@ def dir_selector(string: str, dir_color="\033[1;94m"):
         elif command.lower() in ["c", "clear", "cls"]:
             print("\033[H\033[2J\033[3J")
         elif command.lower() in ["new", "init", "initialize", "make", "new_session"]:
-            print(cursor)
+            print(clear)
             user_input = input("Directory name: ")
             master_password = new_password_prompt("Master password: ")
             storage.init_dir(user_input, master_password)
@@ -83,12 +86,6 @@ def dir_selector(string: str, dir_color="\033[1;94m"):
         elif command.lower() in ["help", "h", "?"]:
             print(help_message)
 
-
-# Colors:
-WARNING = "\033[3;33m"
-DONE = "\033[3;32m"
-NORMAL = "\033[0m"
-DIRCOLOR = "\033[1;94m"
 
 # Error dictionary
 errors = {
@@ -120,7 +117,7 @@ def warning_checker(output_of_tps: list[int]):
 def new_password_prompt(pprompt: str, mask="*"):
     count = 0
     password_input = b""
-    print(cursor)
+    print(clear)
     print(pprompt, flush=True, end="\n\n")
     for warning in warning_checker(storage.tps(password_input.decode())):
         print(warning)
@@ -137,7 +134,7 @@ def new_password_prompt(pprompt: str, mask="*"):
             break
         elif char in [b"\x08", b"\x7f", ""]:
             if count != 0:
-                print(cursor)
+                print(clear)
                 print("\b \b" * len(mask), end="", flush=True)
                 count -= 1
                 password_input = password_input[:-1]
@@ -146,7 +143,7 @@ def new_password_prompt(pprompt: str, mask="*"):
                 for warning in warning_checker(storage.tps(password_input.decode())):
                     print(warning)
         else:
-            print(cursor)
+            print(clear)
             count += 1
             password_input += char.encode()
             print(pprompt, end="")
@@ -154,14 +151,14 @@ def new_password_prompt(pprompt: str, mask="*"):
             for warning in warning_checker(storage.tps(password_input.decode())):
                 print(f"{warning}")
     password = password_input.decode()
-    print(cursor)
+    print(clear)
     return password
 
 
 def password_prompt(pprompt: str, mask="*"):
     count = 0
     password_input = b""
-    print(cursor)
+    print(clear)
     print(pprompt, flush=True, end="")
     while True:
         char = getch.getch()
@@ -176,18 +173,18 @@ def password_prompt(pprompt: str, mask="*"):
             break
         elif char in [b"\x08", b"\x7f", ""]:
             if count != 0:
-                print(cursor)
+                print(clear)
                 print("\b \b" * len(mask), end="", flush=True)
                 count -= 1
                 password_input = password_input[:-1]
                 print(pprompt, end="")
                 print((mask * count), end="", flush=True)
         else:
-            print(cursor)
+            print(clear)
             count += 1
             password_input += char.encode()
             print(pprompt, end="")
             print((mask * count), end="", flush=True)
     password = password_input.decode()
-    print(cursor)
+    print(clear)
     return password
