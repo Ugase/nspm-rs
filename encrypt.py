@@ -26,19 +26,12 @@ def encrypt(master_password: str, password: str, salt_loc: str):
     salt = urandom(128)
     with open(salt_loc, "wb") as salting:
         salting.write(salt)
-        # salting.write("\n".encode())
-    # kdf = PBKDF2HMAC(
-    #     algorithm=hashes.SHA3_512(),
-    #     length=32,
-    #     salt=salt,
-    #     iterations=1_480_000,
-    # )
     kdf = Argon2id(
         salt=salt,
         length=32,
         iterations=3,
         lanes=4,
-        memory_cost=2**16,
+        memory_cost=2**18,
     )
     key = urlsafe_b64encode(kdf.derive(master_password.encode()))
     f = Fernet(key)
@@ -46,15 +39,12 @@ def encrypt(master_password: str, password: str, salt_loc: str):
 
 
 def decrypt(master_password: str, encrypted: bytes, salt: bytes):
-    # kdf = PBKDF2HMAC(
-    #     algorithm=hashes.SHA3_512(), length=32, salt=salt, iterations=1_480_000
-    # )
     kdf = Argon2id(
         salt=salt,
         length=32,
         iterations=3,
         lanes=4,
-        memory_cost=2**16,
+        memory_cost=2**18,
     )
     key = urlsafe_b64encode(kdf.derive(master_password.encode()))
     f = Fernet(key)
