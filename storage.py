@@ -32,7 +32,7 @@ def tps(password: str):
 
 def cmp(master_password: str, file_name: str):
     """(C)reate (M)aster (P)assword"""
-    salt = os.urandom(256)
+    salt = os.urandom(1024)
     with open(file_name, "wb") as file:
         file.write(encrypt.hash(master_password, salt))
     with open(f"{file_name}_salt", "wb") as msalt:
