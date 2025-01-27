@@ -1,4 +1,4 @@
-use argon2::password_hash::{SaltString, rand_core::OsRng};
+use argon2::password_hash::rand_core::OsRng;
 use nspm::cryptography::{encrypt, generate_salt, hash};
 
 fn main() {
