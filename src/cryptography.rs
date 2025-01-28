@@ -13,7 +13,7 @@ pub fn hash(string: &[u8], salt: &[u8]) -> Result<String, argon2::Error> {
         argon2::Version::V0x10,
         argon2::Params::new(2_u32.pow(16), 1, 3, Some(2048))?,
     );
-    argon.hash_password_into(&string, &salt, &mut out)?;
+    argon.hash_password_into(string, salt, &mut out)?;
     Ok(URL_SAFE.encode(out))
 }
 
@@ -31,7 +31,7 @@ pub fn generate_salt(
 
 pub fn encrypt(pwd: &[u8], master_pwd: &[u8], salt: SaltString) -> String {
     let mut key = [0u8; KEY_LENGTH];
-    let mut buffer = pwd.clone();
+    let buffer = pwd;
     let argon = Argon2::new_with_secret(
         master_pwd,
         Algorithm::Argon2id,
@@ -39,8 +39,30 @@ pub fn encrypt(pwd: &[u8], master_pwd: &[u8], salt: SaltString) -> String {
         argon2::Params::new(2_u32.pow(16), 2, 3, Some(KEY_LENGTH)).unwrap(),
     )
     .unwrap();
-    argon.hash_password_into(pwd, &salt.as_str().as_bytes(), &mut key);
+    let _ = argon.hash_password_into(master_pwd, salt.as_str().as_bytes(), &mut key);
     let key_b64 = URL_SAFE.encode(key);
-    let f = Fernet::new(&key_b64.as_str()).unwrap();
-    f.encrypt(&buffer)
+    println!("{}", key_b64);
+    let f = Fernet::new(key_b64.as_str()).unwrap();
+    f.encrypt(buffer)
+}
+
+pub fn decrypt(pwd: &[u8], master_pwd: &[u8], salt: SaltString) -> String {
+    let mut key = [0u8; KEY_LENGTH];
+    let buffer = pwd;
+    let argon = Argon2::new_with_secret(
+        master_pwd,
+        Algorithm::Argon2id,
+        argon2::Version::V0x10,
+        argon2::Params::new(2_u32.pow(16), 2, 3, Some(KEY_LENGTH)).unwrap(),
+    )
+    .unwrap();
+    let _ = argon.hash_password_into(master_pwd, salt.as_str().as_bytes(), &mut key);
+    let key_b64 = URL_SAFE.encode(key);
+    println!("{}", key_b64);
+    let f = Fernet::new(key_b64.as_str()).unwrap();
+    drop(key_b64);
+    let decrypted = f.decrypt(std::str::from_utf8(buffer).unwrap()).unwrap();
+    drop(f);
+    let decrypted_str = std::str::from_utf8(&decrypted).unwrap();
+    String::from(decrypted_str)
 }
