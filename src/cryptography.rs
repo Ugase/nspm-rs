@@ -41,7 +41,6 @@ pub fn encrypt(pwd: &[u8], master_pwd: &[u8], salt: SaltString) -> String {
     .unwrap();
     let _ = argon.hash_password_into(master_pwd, salt.as_str().as_bytes(), &mut key);
     let key_b64 = URL_SAFE.encode(key);
-    println!("{}", key_b64);
     let f = Fernet::new(key_b64.as_str()).unwrap();
     f.encrypt(buffer)
 }
@@ -58,7 +57,6 @@ pub fn decrypt(pwd: &[u8], master_pwd: &[u8], salt: SaltString) -> String {
     .unwrap();
     let _ = argon.hash_password_into(master_pwd, salt.as_str().as_bytes(), &mut key);
     let key_b64 = URL_SAFE.encode(key);
-    println!("{}", key_b64);
     let f = Fernet::new(key_b64.as_str()).unwrap();
     drop(key_b64);
     let decrypted = f.decrypt(std::str::from_utf8(buffer).unwrap()).unwrap();
