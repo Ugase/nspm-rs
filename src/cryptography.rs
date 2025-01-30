@@ -7,14 +7,14 @@ const LENGTH: usize = 32;
 const KEY_LENGTH: usize = 32;
 
 pub fn hash(string: &[u8], salt: &[u8]) -> Result<String, argon2::Error> {
-    let mut out = [0u8; 2048];
+    let mut hash_output = [0u8; 2048];
     let argon = Argon2::new(
         Algorithm::Argon2id,
         argon2::Version::V0x10,
         argon2::Params::new(2_u32.pow(16), 1, 3, Some(2048))?,
     );
-    argon.hash_password_into(string, salt, &mut out)?;
-    Ok(URL_SAFE.encode(out))
+    argon.hash_password_into(string, salt, &mut hash_output)?;
+    Ok(URL_SAFE.encode(hash_output))
 }
 
 pub fn check_hash(string: &[u8], salt: &[u8], hash_check: String) -> bool {
@@ -24,9 +24,9 @@ pub fn check_hash(string: &[u8], salt: &[u8], hash_check: String) -> bool {
 pub fn generate_salt(
     rand: &mut impl rand_core::CryptoRngCore,
 ) -> Result<SaltString, argon2::password_hash::Error> {
-    let mut buf = [0u8; LENGTH];
-    rand.fill_bytes(&mut buf);
-    SaltString::encode_b64(&buf)
+    let mut buffer = [0u8; LENGTH];
+    rand.fill_bytes(&mut buffer);
+    SaltString::encode_b64(&buffer)
 }
 
 pub fn encrypt(pwd: &[u8], master_pwd: &[u8], salt: SaltString) -> String {

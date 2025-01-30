@@ -1,12 +1,12 @@
-use nspm::storage::PasswordArray;
-
+use nspm::ui::directory_selector;
 fn main() {
-    let dirname = String::from("haa");
-    let master = String::from("here");
-    let mut pa = PasswordArray::new(master.clone());
-    pa.load(master, dirname.clone()).unwrap();
-    pa.edit_password("haha".to_string(), "password".to_string());
-    dbg!(&pa);
-    pa.remove_password("haha".to_string());
-    dbg!(pa);
+    //let items = vec![
+    //    "1. Add a password",
+    //    "2. Edit a password",
+    //    "3. Remove a password",
+    //    "4. List passwords",
+    //    "5. Generate password",
+    //    "6. Save & quit",
+    //];
+    directory_selector();
 }
