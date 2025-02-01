@@ -2,6 +2,8 @@
 name = "nspm"
 version = "0.1.0"
 edition = "2024"
+description = "A password manager i made for fun (don't use this for real)"
+license = "MIT"
 
 [dependencies]
 argon2 = "0.5.3"
