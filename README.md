@@ -10,7 +10,6 @@ nspm is the reboot of spm (shitpasswordmanager)
 - actually structured directories so you don't have to make copies of the program
 - better interface
 - You don't have to make passwords that are divisable by 32
-- Removed redundent "Get password" option
 - better with generated password
 - works (for now)
 
