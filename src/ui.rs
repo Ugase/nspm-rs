@@ -28,7 +28,7 @@ choose: choose {dirname}";
 pub fn menu(items: &Vec<&str>) -> usize {
     println!("{}", CLEAR);
     let selection = Select::new()
-        .with_prompt("nspm v0.1.0")
+        .with_prompt("nspm v0.1.1")
         .items(items)
         .interact()
         .unwrap();

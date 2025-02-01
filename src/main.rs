@@ -13,7 +13,7 @@ fn main() {
     ];
     let directory_name = directory_selector();
     if directory_name[2] == *"true" {
-        let mut password_array = PasswordArray::new(directory_name[1].clone());
+        let mut password_array = PasswordArray::new(&directory_name[0]);
         loop {
             action(
                 menu(&items).try_into().unwrap(),
@@ -22,7 +22,7 @@ fn main() {
             );
         }
     } else {
-        let mut password_array = PasswordArray::new(directory_name[0].clone());
+        let mut password_array = PasswordArray::new(&directory_name[0]);
         password_array
             .load(directory_name[1].clone(), directory_name[0].clone())
             .unwrap();

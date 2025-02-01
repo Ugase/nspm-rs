@@ -27,11 +27,11 @@ pub struct PasswordArray {
 }
 
 impl PasswordArray {
-    pub fn new(master_password: String) -> PasswordArray {
+    pub fn new(master_password: &str) -> PasswordArray {
         PasswordArray {
             passwords: vec![],
             services: vec![],
-            master_password,
+            master_password: master_password.to_owned(),
             table: Table::new(),
         }
     }
