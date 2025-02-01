@@ -12,7 +12,7 @@ fn main() {
         "6. Save & quit",
     ];
     let directory_name = directory_selector();
-    if directory_name[2] == "true".to_string() {
+    if directory_name[2] == *"true" {
         let mut password_array = PasswordArray::new(directory_name[1].clone());
         loop {
             action(

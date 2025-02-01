@@ -17,8 +17,8 @@ pub fn hash(string: &[u8], salt: &[u8]) -> Result<String, argon2::Error> {
     Ok(URL_SAFE.encode(hash_output))
 }
 
-pub fn check_hash(string: &[u8], salt: &[u8], hash_check: String) -> bool {
-    hash(string, salt).unwrap() == hash_check
+pub fn check_hash(string: &str, salt: &str, hash_check: &String) -> bool {
+    hash(string.as_bytes(), salt.as_bytes()).unwrap() == *hash_check
 }
 
 pub fn generate_salt(
