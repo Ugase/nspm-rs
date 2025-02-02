@@ -28,7 +28,7 @@ choose: choose {dirname}";
 pub fn menu(items: &Vec<&str>) -> usize {
     println!("{}", CLEAR);
     let selection = Select::new()
-        .with_prompt("nspm v0.1.1")
+        .with_prompt("nspm v0.2.0")
         .items(items)
         .interact()
         .unwrap();
@@ -74,7 +74,7 @@ fn process_command(alias: &str) -> &str {
 }
 
 fn new_directory() -> [String; 3] {
-    let directory_name = Input::new()
+    let directory_name: String = Input::new()
         .with_prompt("Directory name")
         .report(false)
         .interact_text()
@@ -88,15 +88,15 @@ fn new_directory() -> [String; 3] {
     [directory_name, master_password, "true".to_string()]
 }
 
-fn input(prompt: impl std::fmt::Display) -> String {
-    let mut dkjsbgf_jdscbvgfdsnb = String::new();
+fn input(prompt: &[u8]) -> String {
+    let mut buffer = String::new();
     let mut stdout = std::io::stdout();
-    let _ = stdout.write(format!("{}", prompt).as_bytes());
+    let _ = stdout.write(prompt);
     stdout.flush().unwrap();
     std::io::stdin()
-        .read_line(&mut dkjsbgf_jdscbvgfdsnb)
+        .read_line(&mut buffer)
         .expect("Something went wrong");
-    dkjsbgf_jdscbvgfdsnb
+    buffer
 }
 
 fn getcwd() -> String {
@@ -110,7 +110,7 @@ fn getcwd() -> String {
 
 pub fn directory_selector() -> [String; 3] {
     loop {
-        let usr = input(format!("\x1b[94m{}\x1b[0m\n\x1b[95m❯ \x1b[0m", getcwd()));
+        let usr = input(format!("\x1b[94m{}\x1b[0m\n\x1b[95m❯ \x1b[0m", getcwd()).as_bytes());
         let sp: Vec<&str> = usr.split_whitespace().collect();
         if sp.is_empty() {
             continue;
@@ -178,7 +178,7 @@ pub fn pause() {
     stdin().read_exact(&mut [0]).unwrap();
 }
 
-pub fn action(index: u8, password_array: &mut PasswordArray, directory_name: String) {
+pub fn action(index: u8, password_array: &mut PasswordArray, directory_name: &str) {
     match index {
         0 => {
             let service = Input::new().with_prompt("Service").interact().unwrap();
@@ -198,7 +198,7 @@ pub fn action(index: u8, password_array: &mut PasswordArray, directory_name: Str
             let _ = password_array.remove_password(service);
         }
         3 => {
-            println!("{}", password_array.table());
+            println!("{}", password_array.table);
             pause();
         }
         4 => {
@@ -228,7 +228,7 @@ pub fn action(index: u8, password_array: &mut PasswordArray, directory_name: Str
                 generated_password.push_str(chars.get(os.random_range(..94usize)).unwrap());
             }
             println!("Generated password: {generated_password}");
-            let answer = input("Do you want to add this password? ");
+            let answer = input(b"Do you want to add this password? ");
             if [
                 "y",
                 "yes",

@@ -18,19 +18,19 @@ fn main() {
             action(
                 menu(&items).try_into().unwrap(),
                 &mut password_array,
-                directory_name[0].clone(),
+                &directory_name[0],
             );
         }
     } else {
         let mut password_array = PasswordArray::new(&directory_name[0]);
         password_array
-            .load(directory_name[1].clone(), directory_name[0].clone())
+            .load(&directory_name[1], &directory_name[0])
             .unwrap();
         loop {
             action(
                 menu(&items).try_into().unwrap(),
                 &mut password_array,
-                directory_name[0].clone(),
+                &directory_name[0],
             );
         }
     }

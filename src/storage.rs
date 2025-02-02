@@ -11,7 +11,7 @@ use std::iter::zip;
 
 #[derive(Debug, Clone)]
 pub struct Password {
-    service_name: String,
+    service: String,
     password: String,
     salt: SaltString,
     master_password: String,
@@ -23,7 +23,7 @@ pub struct PasswordArray {
     passwords: Vec<Password>,
     services: Vec<String>,
     master_password: String,
-    table: Table,
+    pub table: Table,
 }
 
 impl PasswordArray {
@@ -35,7 +35,7 @@ impl PasswordArray {
             table: Table::new(),
         }
     }
-    pub fn save(&mut self, directory_name: String) {
+    pub fn save(&mut self, directory_name: &str) {
         self.encrypt();
         for (index, password) in zip(0..self.passwords.len(), self.passwords.clone()) {
             let password_location = format!("{directory_name}/passwords/password_{index}");
@@ -44,8 +44,8 @@ impl PasswordArray {
             password.save(&password_location, &salt_location, &service_location);
         }
     }
-    pub fn load(&mut self, master_password: String, directory_name: String) -> Result<(), &str> {
-        self.master_password = master_password;
+    pub fn load(&mut self, master_password: &str, directory_name: &str) -> Result<(), &str> {
+        self.master_password = master_password.to_string();
         if !self.passwords.is_empty() {
             return Err("self.passwords not empty");
         }
@@ -64,7 +64,7 @@ impl PasswordArray {
             )
             .unwrap();
             let password = Password {
-                service_name: service_name.clone(),
+                service: service_name.clone(),
                 password: encrypted_password,
                 salt,
                 master_password: self.master_password.clone(),
@@ -77,9 +77,9 @@ impl PasswordArray {
         self.update_table();
         Ok(())
     }
-    pub fn add_password(&mut self, service: String, password: String) -> Result<(), String> {
+    pub fn add_password(&mut self, service: String, password: String) -> Result<(), &str> {
         if self.services.contains(&service) {
-            return Err("service name is taken".to_string());
+            return Err("service name is taken");
         }
         self.passwords.push(Password::new(
             service.clone(),
@@ -98,9 +98,9 @@ impl PasswordArray {
         }
         None
     }
-    pub fn edit_password(&mut self, service_name: String, new_pass: String) -> Result<(), String> {
+    pub fn edit_password(&mut self, service_name: String, new_pass: String) -> Result<(), &str> {
         if !self.services.contains(&service_name) {
-            return Err("service does not exist".to_string());
+            return Err("service does not exist");
         }
         let index = self.find_index(service_name).unwrap();
         let a: &mut Password = self.passwords.get_mut(index).unwrap();
@@ -108,10 +108,10 @@ impl PasswordArray {
         self.update_table();
         Ok(())
     }
-    pub fn remove_password(&mut self, service_name: String) -> Result<(), String> {
+    pub fn remove_password(&mut self, service_name: String) -> Result<(), &str> {
         let index = self.find_index(service_name);
         if index.is_none() {
-            return Err(String::from("couldn't find service"));
+            return Err("couldn't find service");
         }
         let index = index.unwrap();
         self.passwords.remove(index);
@@ -148,15 +148,12 @@ impl PasswordArray {
             .set_header(vec!["Services", "Passwords"])
             .add_rows(result);
     }
-    pub fn table(&self) -> Table {
-        self.table.clone()
-    }
 }
 
 impl Password {
     pub fn new(service_name: String, password: String, master: String) -> Password {
         Password {
-            service_name,
+            service: service_name,
             password,
             salt: generate_salt(&mut OsRng).unwrap(),
             master_password: master,
@@ -169,7 +166,7 @@ impl Password {
         }
         fs::write(file_name, self.password).unwrap();
         fs::write(salt_location, self.salt.as_str()).unwrap();
-        fs::write(service_location, self.service_name).unwrap();
+        fs::write(service_location, self.service).unwrap();
     }
     pub fn encrypt(&mut self) {
         self.password = encrypt(
@@ -180,9 +177,9 @@ impl Password {
         self.master_password = String::new();
         self.is_encrypted = true;
     }
-    pub fn decrypt(&mut self) -> Result<(), String> {
+    pub fn decrypt(&mut self) -> Result<(), &str> {
         if !self.is_encrypted {
-            return Err("already decrypted".to_string());
+            return Err("already decrypted");
         }
         self.password = decrypt(
             self.password.as_bytes(),
@@ -192,16 +189,16 @@ impl Password {
         self.is_encrypted = false;
         Ok(())
     }
-    fn edit_password(&mut self, new_pass: String) -> Result<(), String> {
+    fn edit_password(&mut self, new_pass: String) -> Result<(), &str> {
         if self.is_encrypted {
-            return Err("is encrypted".to_string());
+            return Err("is encrypted");
         }
         self.password = new_pass;
         Ok(())
     }
 }
 
-fn create_master_password(master_password: &String, dir_name: &String) {
+fn create_master_password(master_password: &str, dir_name: &str) {
     let salt = generate_salt(&mut OsRng).unwrap();
     let _ = fs::write(
         dir_name.to_owned() + &String::from("/master_password"),
@@ -213,22 +210,22 @@ fn create_master_password(master_password: &String, dir_name: &String) {
     );
 }
 
-pub fn get_master_password(dir_name: &String) -> Result<[String; 2], std::io::Error> {
+pub fn get_master_password(dir_name: &str) -> Result<[String; 2], std::io::Error> {
     let master_password =
         fs::read_to_string(dir_name.to_owned() + &String::from("/master_password"))?;
     let salt = fs::read_to_string(dir_name.to_owned() + &String::from("/master_password_salt"))?;
     Ok([master_password, salt])
 }
 
-pub fn initialize_directory(name: &String, master_password: &String) {
+pub fn initialize_directory(name: &str, master_password: &str) {
     let _ = fs::create_dir(name);
-    let _ = fs::create_dir(name.to_owned() + &String::from("/passwords"));
-    let _ = fs::create_dir(name.to_owned() + &String::from("/services"));
-    let _ = fs::create_dir(name.to_owned() + &String::from("/salts"));
+    let _ = fs::create_dir(format!("{name}/passwords"));
+    let _ = fs::create_dir(format!("{name}/services"));
+    let _ = fs::create_dir(format!("{name}/salts"));
     create_master_password(master_password, name);
 }
 
-pub fn verify_directory(dir_name: &String) -> bool {
+pub fn verify_directory(dir_name: &str) -> bool {
     let list: [String; 5] = [
         String::from("salts"),
         String::from("passwords"),

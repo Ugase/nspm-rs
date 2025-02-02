@@ -3,7 +3,7 @@ use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE;
 use fernet::Fernet;
 
-const LENGTH: usize = 32;
+const SALT_LENGTH: usize = 32;
 const KEY_LENGTH: usize = 32;
 
 pub fn hash(string: &[u8], salt: &[u8]) -> Result<String, argon2::Error> {
@@ -22,10 +22,10 @@ pub fn check_hash(string: &str, salt: &str, hash_check: &String) -> bool {
 }
 
 pub fn generate_salt(
-    rand: &mut impl rand_core::CryptoRngCore,
+    rand: &mut impl rand_core::TryCryptoRng,
 ) -> Result<SaltString, argon2::password_hash::Error> {
-    let mut buffer = [0u8; LENGTH];
-    rand.fill_bytes(&mut buffer);
+    let mut buffer = [0u8; SALT_LENGTH];
+    rand.try_fill_bytes(&mut buffer).unwrap();
     SaltString::encode_b64(&buffer)
 }
 
