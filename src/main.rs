@@ -2,6 +2,7 @@ use nspm::{
     storage::PasswordArray,
     ui::{action, directory_selector, menu},
 };
+
 fn main() {
     let items = vec![
         "1. Add a password",
@@ -11,12 +12,13 @@ fn main() {
         "5. Generate password",
         "6. Save & quit",
     ];
+    let prompt = "nspm v0.3.0";
     let directory_name = directory_selector();
     if directory_name[2] == *"true" {
         let mut password_array = PasswordArray::new(&directory_name[0]);
         loop {
             action(
-                menu(&items).try_into().unwrap(),
+                menu(&items, prompt).try_into().unwrap(),
                 &mut password_array,
                 &directory_name[0],
             );
@@ -28,7 +30,7 @@ fn main() {
             .unwrap();
         loop {
             action(
-                menu(&items).try_into().unwrap(),
+                menu(&items, prompt).try_into().unwrap(),
                 &mut password_array,
                 &directory_name[0],
             );

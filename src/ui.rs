@@ -25,10 +25,36 @@ Commands with no arguments: ls, exit, clear, help, new
 cd: cd {dirname}
 choose: choose {dirname}";
 
-pub fn menu(items: &Vec<&str>) -> usize {
+const YESES: [&str; 15] = [
+    "y",
+    "yes",
+    "ye",
+    "yahoo",
+    "yes i want to save this password to be able to access it again later",
+    "save",
+    "ok",
+    "k",
+    "sure",
+    "fine",
+    "finally",
+    "just save",
+    "es",
+    "s",
+    "se",
+];
+
+const CHARS: [&str; 94] = [
+    "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s",
+    "t", "u", "v", "w", "x", "y", "z", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L",
+    "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z", "0", "1", "2", "3", "4",
+    "5", "6", "7", "8", "9", "!", "\"", "#", "$", "%", "&", "'", "(", ")", "*", "+", ",", "-", ".",
+    "/", ":", ";", "<", "=", ">", "?", "@", "[", "\\", "]", "^", "_", "`", "{", "|", "}", "~",
+];
+
+pub fn menu(items: &Vec<&str>, prompt: &str) -> usize {
     println!("{}", CLEAR);
     let selection = Select::new()
-        .with_prompt("nspm v0.2.0")
+        .with_prompt(prompt)
         .items(items)
         .interact()
         .unwrap();
@@ -57,7 +83,7 @@ fn list_directory(path: &str) {
     }
 }
 
-fn process_command(alias: &str) -> &str {
+fn process_alias(alias: &str) -> &str {
     let alias = alias.trim();
     if ["choose", "cd", "ls", "exit", "clear", "new", "help"].contains(&alias) {
         return alias;
@@ -108,6 +134,43 @@ fn getcwd() -> String {
         .to_string()
 }
 
+fn propmt_master_password(directory_name: &str) -> String {
+    Password::new()
+        .with_prompt("Master password")
+        .report(false)
+        .validate_with(|input: &String| -> Result<(), &str> {
+            let hashed_master_password = get_master_password(directory_name).unwrap();
+            if !check_hash(
+                input.as_str(),
+                &hashed_master_password[1],
+                &hashed_master_password[0],
+            ) {
+                return Err("Incorrect master password");
+            }
+            Ok(())
+        })
+        .interact()
+        .expect("uhhhh")
+}
+
+fn process_command(command: &str) {
+    if command == "ls" {
+        list_directory(&getcwd());
+    } else if command == "exit" {
+        std::process::exit(0)
+    } else if command == "clear" {
+        println!("{}", CLEAR);
+    } else if command == "help" {
+        println!("{}", HELP_MESSAGE);
+    }
+}
+
+pub fn cd(directory_name: &str) {
+    if std::env::set_current_dir(format!("{}/{}", getcwd(), directory_name).trim()).is_err() {
+        println!("Something went wrong")
+    }
+}
+
 pub fn directory_selector() -> [String; 3] {
     loop {
         let usr = input(format!("\x1b[94m{}\x1b[0m\n\x1b[95m❯ \x1b[0m", getcwd()).as_bytes());
@@ -115,57 +178,30 @@ pub fn directory_selector() -> [String; 3] {
         if sp.is_empty() {
             continue;
         } else if sp.len() == 1 {
-            let command = process_command(sp[0]);
+            let command = process_alias(sp[0]);
             if ["cd", "choose"].contains(&command) {
                 continue;
             }
-            if command == "ls" {
-                list_directory(&getcwd());
-            } else if command == "exit" {
-                std::process::exit(0)
-            } else if command == "clear" {
-                println!("{}", CLEAR);
-            } else if command == "help" {
-                println!("{}", HELP_MESSAGE);
-            } else if command == "new" {
+            if command == "new" {
                 return new_directory();
-            };
-        } else if sp.len() >= 2 {
-            let (command, command_input): (&str, &str) = (process_command(sp[0]), sp[1]);
-            if command == "cd" {
-                if std::env::set_current_dir(format!("{}/{}", getcwd(), command_input).trim())
-                    .is_err()
-                {
-                    println!("Something went wrong")
-                }
-            } else if command == "choose" {
-                let directory_name: String =
-                    format!("{}/{}", getcwd(), command_input).trim().to_string();
-                if !crate::storage::verify_directory(&directory_name) {
-                    println!(
-                        "Either the directory provided doesn't exist or it doesn't have the correct files and folders"
-                    );
-                    continue;
-                }
-                let master_password = Password::new()
-                    .with_prompt("Master password")
-                    .report(false)
-                    .validate_with(|input: &String| -> Result<(), &str> {
-                        let hashed_master_password = get_master_password(&directory_name).unwrap();
-                        if check_hash(
-                            input.as_str(),
-                            &hashed_master_password[1],
-                            &hashed_master_password[0],
-                        ) {
-                            Ok(())
-                        } else {
-                            Err("Incorrect master password")
-                        }
-                    })
-                    .interact()
-                    .expect("uhhhh");
-                return [directory_name, master_password, "false".to_string()];
             }
+            process_command(command);
+            continue;
+        }
+        let (command, command_input): (&str, &str) = (process_alias(sp[0]), sp[1]);
+        if command == "cd" {
+            cd(command_input);
+        } else if command == "choose" {
+            let directory_name: String =
+                format!("{}/{}", getcwd(), command_input).trim().to_string();
+            if !crate::storage::verify_directory(&directory_name) {
+                println!(
+                    "Either the directory provided doesn't exist or it doesn't have the correct files and folders"
+                );
+                continue;
+            }
+            let master_password = propmt_master_password(&directory_name);
+            return [directory_name, master_password, "false".to_string()];
         }
     }
 }
@@ -176,6 +212,31 @@ pub fn pause() {
     stdout.write_all(b"Press Enter to continue...").unwrap();
     stdout.flush().unwrap();
     stdin().read_exact(&mut [0]).unwrap();
+}
+
+pub fn generate_password(length: u32) -> String {
+    let mut os = StdRng::from_os_rng();
+    let mut generated_password = String::new();
+    for _ in 0..length {
+        generated_password.push_str(CHARS.get(os.random_range(..94usize)).unwrap());
+    }
+    generated_password
+}
+
+pub fn prompt_number(prompt: &str, default: String) -> i32 {
+    let number = Input::new()
+        .with_prompt(prompt)
+        .validate_with(|input: &String| -> Result<(), &str> {
+            if !input.bytes().all(|b| b.is_ascii_digit()) {
+                return Err("not a number");
+            };
+            Ok(())
+        })
+        .default(default)
+        .interact()
+        .unwrap();
+    let number: i32 = number.parse().unwrap();
+    number
 }
 
 pub fn action(index: u8, password_array: &mut PasswordArray, directory_name: &str) {
@@ -202,53 +263,14 @@ pub fn action(index: u8, password_array: &mut PasswordArray, directory_name: &st
             pause();
         }
         4 => {
-            let chars = [
-                "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p",
-                "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", "A", "B", "C", "D", "E", "F",
-                "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V",
-                "W", "X", "Y", "Z", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "!", "\"",
-                "#", "$", "%", "&", "'", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<",
-                "=", ">", "?", "@", "[", "\\", "]", "^", "_", "`", "{", "|", "}", "~",
-            ];
-            let mut os = StdRng::from_os_rng();
-            let length = Input::new()
-                .with_prompt("Length of generated password")
-                .validate_with(|input: &String| -> Result<(), &str> {
-                    if !input.bytes().all(|b| b.is_ascii_digit()) {
-                        return Err("not a number");
-                    };
-                    Ok(())
-                })
-                .default("14".to_owned())
-                .interact()
-                .unwrap();
-            let length: u32 = length.parse().unwrap();
-            let mut generated_password = String::new();
-            for _ in 0..length {
-                generated_password.push_str(chars.get(os.random_range(..94usize)).unwrap());
-            }
+            let generated_password = generate_password(
+                prompt_number("Length of generated password", "14".to_string())
+                    .try_into()
+                    .unwrap(),
+            );
             println!("Generated password: {generated_password}");
             let answer = input(b"Do you want to add this password? ");
-            if [
-                "y",
-                "yes",
-                "ye",
-                "yahoo",
-                "yes i want to save this password to be able to access it again later",
-                "save",
-                "ok",
-                "k",
-                "sure",
-                "fine",
-                "finally",
-                "just save",
-                "es",
-                "s",
-                "se",
-            ]
-            .iter()
-            .any(|y| *y == answer.to_lowercase().trim())
-            {
+            if YESES.iter().any(|y| *y == answer.to_lowercase().trim()) {
                 let service = Input::new().with_prompt("Service").interact().unwrap();
                 let _ = password_array.add_password(service, generated_password);
             }

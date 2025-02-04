@@ -1,6 +1,6 @@
 [package]
 name = "nspm"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 description = "A password manager i made for fun and learning (don't use this for real)"
 license = "MIT"
