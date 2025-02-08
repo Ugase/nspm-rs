@@ -14,8 +14,8 @@ fn main() {
     ];
     let prompt = "nspm v0.3.0";
     let directory_name = directory_selector();
-    if directory_name[2] == *"true" {
-        let mut password_array = PasswordArray::new(&directory_name[0]);
+    if directory_name[2].parse::<bool>().unwrap() {
+        let mut password_array = PasswordArray::new(&directory_name[1]);
         loop {
             action(
                 menu(&items, prompt).try_into().unwrap(),
@@ -23,17 +23,16 @@ fn main() {
                 &directory_name[0],
             );
         }
-    } else {
-        let mut password_array = PasswordArray::new(&directory_name[0]);
-        password_array
-            .load(&directory_name[1], &directory_name[0])
-            .unwrap();
-        loop {
-            action(
-                menu(&items, prompt).try_into().unwrap(),
-                &mut password_array,
-                &directory_name[0],
-            );
-        }
+    }
+    let mut password_array = PasswordArray::new(&directory_name[1]);
+    password_array
+        .load(&directory_name[1], &directory_name[0])
+        .unwrap();
+    loop {
+        action(
+            menu(&items, prompt).try_into().unwrap(),
+            &mut password_array,
+            &directory_name[0],
+        );
     }
 }

@@ -51,6 +51,7 @@ const CHARS: [&str; 94] = [
     "/", ":", ";", "<", "=", ">", "?", "@", "[", "\\", "]", "^", "_", "`", "{", "|", "}", "~",
 ];
 
+/// Make a menu using [Select]
 pub fn menu(items: &Vec<&str>, prompt: &str) -> usize {
     println!("{}", CLEAR);
     let selection = Select::new()
@@ -61,6 +62,7 @@ pub fn menu(items: &Vec<&str>, prompt: &str) -> usize {
     selection
 }
 
+/// Makes a password prompt using [Password]
 pub fn password_input() -> String {
     let pass = Password::new().with_prompt("Password").interact().unwrap();
     pass
@@ -165,12 +167,14 @@ fn process_command(command: &str) {
     }
 }
 
+/// Changes current working directory
 pub fn cd(directory_name: &str) {
     if std::env::set_current_dir(format!("{}/{}", getcwd(), directory_name).trim()).is_err() {
-        println!("Something went wrong")
+        eprintln!("Something went wrong")
     }
 }
 
+/// Gives a prompt to the user to choose a directory
 pub fn directory_selector() -> [String; 3] {
     loop {
         let usr = input(format!("\x1b[94m{}\x1b[0m\n\x1b[95m❯ \x1b[0m", getcwd()).as_bytes());
@@ -206,7 +210,8 @@ pub fn directory_selector() -> [String; 3] {
     }
 }
 
-// Code from u/K900_ on reddit
+/// Code stolen from u/K900_ on reddit  
+/// Press Enter to continue...
 pub fn pause() {
     let mut stdout = stdout();
     stdout.write_all(b"Press Enter to continue...").unwrap();
@@ -214,6 +219,7 @@ pub fn pause() {
     stdin().read_exact(&mut [0]).unwrap();
 }
 
+/// Generates a random (hopefully) password
 pub fn generate_password(length: u32) -> String {
     let mut os = StdRng::from_os_rng();
     let mut generated_password = String::new();
@@ -223,6 +229,7 @@ pub fn generate_password(length: u32) -> String {
     generated_password
 }
 
+/// Prompts the user for a number
 pub fn prompt_number(prompt: &str, default: String) -> i32 {
     let number = Input::new()
         .with_prompt(prompt)
@@ -239,6 +246,8 @@ pub fn prompt_number(prompt: &str, default: String) -> i32 {
     number
 }
 
+/// a massive match statement used for the functionality of the program
+/// this shouldn't be used any other projects
 pub fn action(index: u8, password_array: &mut PasswordArray, directory_name: &str) {
     match index {
         0 => {
@@ -276,7 +285,7 @@ pub fn action(index: u8, password_array: &mut PasswordArray, directory_name: &st
             }
         }
         5 => {
-            password_array.clone().save(directory_name);
+            password_array.save(directory_name);
             std::process::exit(0)
         }
         _ => {}
