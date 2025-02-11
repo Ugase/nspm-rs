@@ -1,13 +1,20 @@
-use crate::storage::PasswordArray;
-use crate::{cryptography::check_hash, storage::get_master_password};
-use dialoguer::{Input, Password, Select};
-use rand::rngs::StdRng;
-use rand::{Rng, SeedableRng};
-use std::fs;
-use std::io::{Read, Write, stdin, stdout};
+use crate::{
+    cryptography::check_hash,
+    storage::{PasswordArray, get_master_password},
+};
+use dialoguer::{Input, Select};
+use getch_rs::{Getch, Key};
+use rand::{Rng, SeedableRng, rngs::StdRng};
+use std::{
+    collections::HashSet,
+    fmt::Display,
+    fs,
+    io::{Read, Write, stdin, stdout},
+};
 
 const CLEAR: &str = "\x1b[H\x1b[2J\x1b[3J";
-
+const V: &str = "✔ ";
+const W: &str = "⚠️ ";
 const HELP_MESSAGE: &str = "There are a total of 7 commands (which have alaises):
 
 choose (no other alias): Chooses a directory. Only accepts directories with the correct files
@@ -62,10 +69,110 @@ pub fn menu(items: &Vec<&str>, prompt: &str) -> usize {
     selection
 }
 
-/// Makes a password prompt using [Password]
-pub fn password_input() -> String {
-    let pass = Password::new().with_prompt("Password").interact().unwrap();
-    pass
+fn wrap_warning(a: impl Display) {
+    println!("{W} \x1b[1;33m{a}\x1b[0m");
+}
+
+fn wrap_good(a: impl Display) {
+    println!("{V} \x1b[1;32m{a}\x1b[0m");
+}
+
+fn evaluate_password(password: &str) {
+    let mut uni = HashSet::new();
+    for chr in password.chars() {
+        uni.insert(chr);
+    }
+    let (length, upper, unique, digits, lower) = (
+        password.chars().count(),
+        password.chars().filter(|s| s.is_uppercase()).count(),
+        uni.len(),
+        password.chars().filter(|s| s.is_ascii_digit()).count(),
+        password.chars().filter(|s| s.is_lowercase()).count(),
+    );
+    let special = length - (upper + digits + lower);
+    if length < 16 {
+        wrap_warning("The length of the password should be 16 characters long");
+    } else {
+        wrap_good("The length of the password should be 16 characters long");
+    }
+    if upper < 5 {
+        wrap_warning("The password should have atleast 5 capital letters");
+    } else {
+        wrap_good("The password should have atleast 5 capital letters");
+    }
+    if unique < 8 {
+        wrap_warning("The password should have atleast 8 unigue characters");
+    } else {
+        wrap_good("The password should have atleast 8 unigue characters");
+    }
+    if digits < 5 {
+        wrap_warning("The password should have atleast 5 digits");
+    } else {
+        wrap_good("The password should have atleast 5 digits");
+    }
+    if special < 4 {
+        wrap_warning("The password should have atleast 4 special characters");
+    } else {
+        wrap_good("The password should have atleast 4 special characters");
+    }
+}
+
+/// Makes a password prompt with password suggestions
+pub fn new_password_input(prompt: impl Display) -> String {
+    let getch = Getch::new();
+    let mut password = "".to_string();
+    println!("{}", CLEAR);
+    println!("{prompt}");
+    evaluate_password(&password);
+    loop {
+        let chr = getch.getch();
+        match chr {
+            Ok(Key::Char('\r')) => return password,
+            Ok(Key::Char(c)) => {
+                password.push(c);
+            }
+            Ok(Key::Backspace) => {
+                password.pop();
+            }
+            Ok(Key::Delete) => {
+                password.pop();
+            }
+            Ok(Key::Ctrl('c')) => std::process::exit(1),
+            Ok(_key) => {}
+            Err(e) => eprintln!("{e}"),
+        }
+        println!("{}", CLEAR);
+        println!("{prompt}{}", "*".repeat(password.len()));
+        evaluate_password(&password);
+    }
+}
+
+/// Makes a password prompt with no password suggestions
+pub fn password_input(prompt: impl Display) -> String {
+    let getch = Getch::new();
+    let mut password = "".to_string();
+    println!("{}", CLEAR);
+    println!("{prompt}");
+    loop {
+        let chr = getch.getch();
+        match chr {
+            Ok(Key::Char('\r')) => return password,
+            Ok(Key::Char(c)) => {
+                password.push(c);
+            }
+            Ok(Key::Backspace) => {
+                password.pop();
+            }
+            Ok(Key::Delete) => {
+                password.pop();
+            }
+            Ok(Key::Ctrl('c')) => std::process::exit(1),
+            Ok(_key) => {}
+            Err(e) => eprintln!("{e}"),
+        }
+        println!("{}", CLEAR);
+        println!("{prompt}{}", "*".repeat(password.len()));
+    }
 }
 
 fn list_directory(path: &str) {
@@ -101,19 +208,15 @@ fn process_alias(alias: &str) -> &str {
     ""
 }
 
-fn new_directory() -> [String; 3] {
+fn new_directory() -> (String, String, bool) {
     let directory_name: String = Input::new()
         .with_prompt("Directory name")
         .report(false)
         .interact_text()
         .expect("uhhhh");
-    let master_password = Password::new()
-        .with_prompt("Master password")
-        .report(false)
-        .interact()
-        .expect("uhhhh");
+    let master_password = new_password_input("Master password: ");
     crate::storage::initialize_directory(&directory_name, &master_password);
-    [directory_name, master_password, "true".to_string()]
+    (directory_name, master_password, true)
 }
 
 fn input(prompt: &[u8]) -> String {
@@ -136,23 +239,27 @@ fn getcwd() -> String {
         .to_string()
 }
 
-fn propmt_master_password(directory_name: &str) -> String {
-    Password::new()
-        .with_prompt("Master password")
-        .report(false)
-        .validate_with(|input: &String| -> Result<(), &str> {
-            let hashed_master_password = get_master_password(directory_name).unwrap();
-            if !check_hash(
-                input.as_str(),
-                &hashed_master_password[1],
-                &hashed_master_password[0],
-            ) {
-                return Err("Incorrect master password");
-            }
-            Ok(())
-        })
-        .interact()
-        .expect("uhhhh")
+fn check_master_password(directory_name: &str, input: &String) -> bool {
+    let hashed_master_password = get_master_password(directory_name).unwrap();
+    if !check_hash(
+        input.as_str(),
+        &hashed_master_password[1],
+        &hashed_master_password[0],
+    ) {
+        return false;
+    }
+    true
+}
+
+fn prompt_master_password(directory_name: &str) -> String {
+    loop {
+        let master = password_input("Master password: ");
+        if !check_master_password(directory_name, &master) {
+            eprintln!("Incorrect master password");
+            continue;
+        }
+        return master;
+    }
 }
 
 fn process_command(command: &str) {
@@ -175,7 +282,7 @@ pub fn cd(directory_name: &str) {
 }
 
 /// Gives a prompt to the user to choose a directory
-pub fn directory_selector() -> [String; 3] {
+pub fn directory_selector() -> (String, String, bool) {
     loop {
         let usr = input(format!("\x1b[94m{}\x1b[0m\n\x1b[95m❯ \x1b[0m", getcwd()).as_bytes());
         let sp: Vec<&str> = usr.split_whitespace().collect();
@@ -204,8 +311,8 @@ pub fn directory_selector() -> [String; 3] {
                 );
                 continue;
             }
-            let master_password = propmt_master_password(&directory_name);
-            return [directory_name, master_password, "false".to_string()];
+            let master_password = prompt_master_password(&directory_name);
+            return (directory_name, master_password, false);
         }
     }
 }
@@ -252,12 +359,12 @@ pub fn action(index: u8, password_array: &mut PasswordArray, directory_name: &st
     match index {
         0 => {
             let service = Input::new().with_prompt("Service").interact().unwrap();
-            let password = password_input();
+            let password = new_password_input("Password: ");
             let _ = password_array.add_password(service, password);
         }
         1 => {
             let service = Input::new().with_prompt("Service").interact().unwrap();
-            let new_password = password_input();
+            let new_password = new_password_input("Password: ");
             let _ = password_array.edit_password(service, new_password);
         }
         2 => {

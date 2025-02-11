@@ -284,7 +284,7 @@ pub fn verify_directory(dir_name: &str) -> bool {
         if meta.is_err() {
             return false;
         }
-        if meta.unwrap().is_dir() {
+        if !meta.unwrap().is_dir() {
             return false;
         }
     }

@@ -4,7 +4,7 @@ use nspm::{
 };
 
 fn main() {
-    let items = vec![
+    let menu_options = vec![
         "1. Add a password",
         "2. Edit a password",
         "3. Remove a password",
@@ -12,27 +12,29 @@ fn main() {
         "5. Generate password",
         "6. Save & quit",
     ];
-    let prompt = "nspm v0.3.0";
-    let directory_name = directory_selector();
-    if directory_name[2].parse::<bool>().unwrap() {
-        let mut password_array = PasswordArray::new(&directory_name[1]);
+    let prompt = "nspm v0.4.0";
+    let (directory, master_password, is_new) = directory_selector();
+    if is_new {
+        let mut password_array = PasswordArray::new(&master_password);
         loop {
             action(
-                menu(&items, prompt).try_into().unwrap(),
+                menu(&menu_options, prompt).try_into().unwrap(),
                 &mut password_array,
-                &directory_name[0],
+                &directory,
             );
         }
     }
-    let mut password_array = PasswordArray::new(&directory_name[1]);
-    password_array
-        .load(&directory_name[1], &directory_name[0])
-        .unwrap();
+    let mut password_array = PasswordArray::new(&master_password);
+    password_array.load(&master_password, &directory).unwrap();
     loop {
         action(
-            menu(&items, prompt).try_into().unwrap(),
+            menu(&menu_options, prompt).try_into().unwrap(),
             &mut password_array,
-            &directory_name[0],
+            &directory,
         );
     }
 }
+
+//fn main() {
+//    println!("{}", nspm::ui::new_password_input())
+//}
