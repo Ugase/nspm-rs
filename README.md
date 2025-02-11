@@ -1,2 +1,1 @@
-A rewrite of Ugase/nspm (on github) in rust  
-there were some features i couldn't implement that will hopefully implemented later  
+A rewrite of [nspm][https://github.com/Ugase/nspm] (on github) in rust  
