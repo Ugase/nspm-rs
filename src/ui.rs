@@ -69,12 +69,12 @@ pub fn menu(items: &Vec<&str>, prompt: &str) -> usize {
     selection
 }
 
-fn wrap_warning(a: impl Display) {
-    println!("{W} \x1b[1;33m{a}\x1b[0m");
-}
-
-fn wrap_good(a: impl Display) {
-    println!("{V} \x1b[1;32m{a}\x1b[0m");
+fn suggest(message: impl Display, suggestion: bool) {
+    if suggestion {
+        println!("{W} \x1b[1;33m{message}\x1b[0m");
+        return;
+    }
+    println!("{V} \x1b[1;32m{message}\x1b[0m");
 }
 
 fn evaluate_password(password: &str) {
@@ -90,31 +90,23 @@ fn evaluate_password(password: &str) {
         password.chars().filter(|s| s.is_lowercase()).count(),
     );
     let special = length - (upper + digits + lower);
-    if length < 16 {
-        wrap_warning("The length of the password should be 16 characters long");
-    } else {
-        wrap_good("The length of the password should be 16 characters long");
-    }
-    if upper < 5 {
-        wrap_warning("The password should have atleast 5 capital letters");
-    } else {
-        wrap_good("The password should have atleast 5 capital letters");
-    }
-    if unique < 8 {
-        wrap_warning("The password should have atleast 8 unigue characters");
-    } else {
-        wrap_good("The password should have atleast 8 unigue characters");
-    }
-    if digits < 5 {
-        wrap_warning("The password should have atleast 5 digits");
-    } else {
-        wrap_good("The password should have atleast 5 digits");
-    }
-    if special < 4 {
-        wrap_warning("The password should have atleast 4 special characters");
-    } else {
-        wrap_good("The password should have atleast 4 special characters");
-    }
+    suggest(
+        "The length of the password should be 16 characters long",
+        length < 16,
+    );
+    suggest(
+        "The password should have atleast 5 capital letters",
+        upper < 5,
+    );
+    suggest(
+        "The password should have atleast 8 unigue characters",
+        unique < 8,
+    );
+    suggest("The password should have atleast 5 digits", digits < 5);
+    suggest(
+        "The password should have atleast 4 special characters",
+        special < 4,
+    );
 }
 
 /// Makes a password prompt with password suggestions
