@@ -23,7 +23,6 @@ pub struct Password {
 #[derive(Debug, Clone)]
 pub struct PasswordArray {
     passwords: Vec<Password>,
-    services: Vec<String>,
     master_password: String,
     pub table: Table,
 }
@@ -33,7 +32,6 @@ impl PasswordArray {
     pub fn new(master_password: &str) -> PasswordArray {
         PasswordArray {
             passwords: vec![],
-            services: vec![],
             master_password: master_password.to_string(),
             table: Table::new(),
         }
@@ -70,9 +68,6 @@ impl PasswordArray {
                 format!("{directory_name}/services/service_{index}").as_str(),
                 self.master_password.as_str(),
             ));
-            self.services.push(
-                fs::read_to_string(format!("{directory_name}/services/service_{index}")).unwrap(),
-            );
         }
         self.decrypt();
         self.update_table();
@@ -80,21 +75,21 @@ impl PasswordArray {
     }
     /// Adds a password to [PasswordArray]
     pub fn add_password(&mut self, service: String, password: String) -> Result<(), &str> {
-        if self.services.contains(&service) {
+        if self.get_services().contains(&service) {
             return Err("service name is taken");
         }
         self.passwords.push(Password::new(
-            service.clone(),
+            service,
             password,
             self.master_password.clone(),
         ));
-        self.services.push(service);
         self.update_table();
         Ok(())
     }
     fn find_index(&self, service_name: String) -> Option<usize> {
-        for (index, service) in zip(0..self.services.len(), &self.services) {
-            if *service == service_name {
+        let services = self.get_services();
+        for (index, service) in zip(0..services.len(), services) {
+            if service == service_name {
                 return Some(index);
             }
         }
@@ -102,8 +97,8 @@ impl PasswordArray {
     }
     /// (hopefully self explanatory)
     pub fn edit_password(&mut self, service_name: String, new_pass: String) -> Result<(), &str> {
-        if !self.services.contains(&service_name) {
-            return Err("service does not exist");
+        if !self.get_services().contains(&service_name) {
+            return Err("password does not exist");
         }
         let index: usize = self.find_index(service_name).unwrap();
         let a: &mut Password = self.passwords.get_mut(index).unwrap();
@@ -119,7 +114,6 @@ impl PasswordArray {
         }
         let index = index.unwrap();
         self.passwords.remove(index);
-        self.services.remove(index);
         self.update_table();
         Ok(())
     }
@@ -140,7 +134,7 @@ impl PasswordArray {
             passwords.push(password.password.clone());
         }
         let mut result = vec![];
-        for (service, password) in zip(self.services.clone(), passwords) {
+        for (service, password) in zip(self.get_services(), passwords) {
             result.push(vec![service, password]);
         }
         self.table
@@ -151,6 +145,13 @@ impl PasswordArray {
             .set_width(50)
             .set_header(vec!["Services", "Passwords"])
             .add_rows(result);
+    }
+    fn get_services(&self) -> Vec<String> {
+        let mut res = vec![];
+        for password in self.passwords.clone() {
+            res.push(password.service);
+        }
+        res
     }
 }
 
