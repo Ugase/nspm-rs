@@ -1,5 +1,5 @@
 use crate::{
-    ansi::{AnsiRGB, Csi, esc, esc},
+    ansi::{AnsiRGB, BLUE, CLEAR, Csi, EL, ESC, GREEN, MAGENTA, RED, RESET, YELLOW, bold},
     cryptography::check_hash,
     storage::{PasswordArray, get_master_password},
 };
@@ -99,7 +99,7 @@ impl Menu {
                 Ok(_key) => {}
                 Err(e) => eprintln!("{e}"),
             }
-            println!("{}", CLEAR);
+            println!("{CLEAR}");
             println!("{}", self.prompt);
             self.print_items();
         }
@@ -143,7 +143,7 @@ impl Display for ProgressBar<'_> {
         let uthr: u32 = percent as u32;
         write!(
             f,
-            "{0}{2}{3}{5}{4}{1}",
+            "{0}{2}{3}{RESET}{4}{1}",
             self.left,
             self.right,
             self.stop1.gradient(
@@ -154,7 +154,6 @@ impl Display for ProgressBar<'_> {
             self.filled.repeat(usp),
             self.unfilled
                 .repeat((self.length - uthr).try_into().unwrap()),
-            Colors::Reset.ansi()
         )
     }
 }
@@ -237,10 +236,10 @@ fn evaluate_password(password: &str) {
     ];
     for (message, suggestion) in zip(messages, results) {
         if suggestion {
-            println!("{W} \x1b[1;33m{message}\x1b[0m");
+            println!("{W} {GREEN}{message}{RESET}");
             continue;
         }
-        println!("{V} \x1b[1;32m{message}\x1b[0m");
+        println!("{V} {YELLOW}{message}{RESET}");
     }
 }
 
@@ -248,7 +247,7 @@ fn evaluate_password(password: &str) {
 pub fn new_password_input(prompt: impl Display) -> secrecy::SecretString {
     let getch = Getch::new();
     let mut password = String::new();
-    println!("{}", CLEAR);
+    println!("{CLEAR}");
     println!("{prompt}");
     evaluate_password(&password);
     loop {
@@ -268,7 +267,7 @@ pub fn new_password_input(prompt: impl Display) -> secrecy::SecretString {
             Ok(_key) => {}
             Err(e) => eprintln!("{e}"),
         }
-        println!("{}", CLEAR);
+        println!("{CLEAR}");
         println!("{prompt}{}", "*".repeat(password.len()));
         evaluate_password(&password);
     }
@@ -278,7 +277,7 @@ pub fn new_password_input(prompt: impl Display) -> secrecy::SecretString {
 pub fn password_input(prompt: impl Display) -> SecretString {
     let getch = Getch::new();
     let mut password = String::new();
-    println!("{}", CLEAR);
+    println!("{CLEAR}");
     print!("{prompt}");
     let mut buf = std::io::stdout();
     let _ = buf.flush();
@@ -299,7 +298,7 @@ pub fn password_input(prompt: impl Display) -> SecretString {
             Ok(_key) => {}
             Err(e) => eprintln!("{e}"),
         }
-        println!("{}", CLEAR);
+        println!("{CLEAR}");
         print!("{prompt}{}", "*".repeat(password.len()));
         let _ = buf.flush();
     }
@@ -310,7 +309,7 @@ fn list_directory(path: &str) {
         let p = p.unwrap();
         if p.path().is_dir() {
             println!(
-                "\x1b[94;1m{}\x1b[0m",
+                "{BLUE}{bold}{}{RESET}",
                 p.path().as_path().file_name().unwrap().to_str().unwrap()
             );
             continue;
@@ -352,7 +351,12 @@ pub fn inputi(prompt: impl Display, default: String) -> String {
             Ok(_key) => {}
             Err(e) => eprintln!("{e}"),
         }
-        print!("\x1b[F\x1b[E\x1b[2K");
+        print!(
+            "{}{}{}",
+            Csi::CPL.ansi(),
+            Csi::CNL.ansi(),
+            Csi::El(EL::EL2).ansi()
+        );
         print!("{prompt}{buffer}");
         let _ = stdout.flush();
     }
@@ -437,7 +441,7 @@ fn process_command(command: &str) {
     } else if command == "help" {
         println!("{HELP_MESSAGE}");
     } else {
-        println!("\x1b[1;31mCommand not found\x1b[0m");
+        println!("{RED}{bold}Command not found{RESET}");
     }
 }
 
@@ -451,7 +455,7 @@ pub fn cd(directory_name: &str) {
 /// Gives a prompt to the user to choose a directory
 pub fn directory_selector() -> (String, SecretString, bool) {
     loop {
-        let usr = input(format!("{}{}{2}\n{1}❯ {2}", getcwd()).as_bytes());
+        let usr = input(format!("{BLUE}{}{RESET}\n{MAGENTA}❯ {RESET}", getcwd()).as_bytes());
         let sp: Vec<&str> = usr.split_whitespace().collect();
         if sp.is_empty() {
             continue;
@@ -481,7 +485,7 @@ pub fn directory_selector() -> (String, SecretString, bool) {
             let master_password = prompt_master_password(&directory_name);
             return (directory_name, master_password, false);
         } else {
-            println!("\x1b[1;31mCommand not found\x1b[0m");
+            println!("{RED}{bold}Command not found{RESET}");
         }
     }
 }

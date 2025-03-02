@@ -1,5 +1,5 @@
 use crate::{
-    ansi::AnsiRGB,
+    ansi::{AnsiRGB, Csi, EL},
     cryptography::{decrypt, encrypt, generate_salt, hash},
     ui::ProgressBar,
 };
@@ -71,7 +71,12 @@ impl PasswordArray {
             if print_state {
                 let mut buf = std::io::stdout();
                 progress.increse_n();
-                print!("\x1b[F\x1b[E\x1b[2K");
+                print!(
+                    "{}{}{}",
+                    Csi::CPL.ansi(),
+                    Csi::CNL.ansi(),
+                    Csi::El(EL::EL2).ansi()
+                );
                 let _ = buf.flush();
                 print!("{} Saving, {}", progress, password.service);
                 let _ = buf.flush();
@@ -122,7 +127,12 @@ impl PasswordArray {
             ));
             if print_state {
                 let mut buf = std::io::stdout();
-                print!("\x1b[F\x1b[E\x1b[2K");
+                print!(
+                    "{}{}{}",
+                    Csi::CPL.ansi(),
+                    Csi::CNL.ansi(),
+                    Csi::El(EL::EL2).ansi()
+                );
                 let _ = buf.flush();
                 progress.increse_n();
                 print!(
@@ -187,7 +197,12 @@ impl PasswordArray {
         for password in self.passwords.iter_mut() {
             if print_state {
                 let mut buf = std::io::stdout();
-                print!("\x1b[F\x1b[E\x1b[2K");
+                print!(
+                    "{}{}{}",
+                    Csi::CPL.ansi(),
+                    Csi::CNL.ansi(),
+                    Csi::El(EL::EL2).ansi()
+                );
                 let _ = buf.flush();
                 pro.increse_n();
                 print!("{} Decrypting, {}", pro, password.service);
@@ -196,7 +211,12 @@ impl PasswordArray {
             password.decrypt().unwrap();
             if print_state {
                 let mut buf = std::io::stdout();
-                print!("\x1b[F\x1b[E\x1b[2K");
+                print!(
+                    "{}{}{}",
+                    Csi::CPL.ansi(),
+                    Csi::CNL.ansi(),
+                    Csi::El(EL::EL2).ansi()
+                );
                 let _ = buf.flush();
                 pro.increse_n();
                 print!("{} Decrypted, {}", pro, password.service);
@@ -208,7 +228,12 @@ impl PasswordArray {
         for password in self.passwords.iter_mut() {
             if print_state {
                 let mut buf = std::io::stdout();
-                print!("\x1b[F\x1b[E\x1b[2K");
+                print!(
+                    "{}{}{}",
+                    Csi::CPL.ansi(),
+                    Csi::CNL.ansi(),
+                    Csi::El(EL::EL2).ansi()
+                );
                 let _ = buf.flush();
                 pro.increse_n();
                 print!("{} Encrypting, {}", pro, password.service);
@@ -217,7 +242,12 @@ impl PasswordArray {
             password.encrypt().unwrap();
             if print_state {
                 let mut buf = std::io::stdout();
-                print!("\x1b[F\x1b[E\x1b[2K");
+                print!(
+                    "{}{}{}",
+                    Csi::CPL.ansi(),
+                    Csi::CNL.ansi(),
+                    Csi::El(EL::EL2).ansi()
+                );
                 let _ = buf.flush();
                 pro.increse_n();
                 print!("{} Encrypted, {}", pro, password.service);
