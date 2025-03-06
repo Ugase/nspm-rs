@@ -1,5 +1,6 @@
 use crate::{
-    ansi::{AnsiRGB, Csi, EL},
+    ansi::colors::AnsiRGB,
+    ansi::{Csi, EL},
     cryptography::{decrypt, encrypt, generate_salt, hash},
     ui::ProgressBar,
 };

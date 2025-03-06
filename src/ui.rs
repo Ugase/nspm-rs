@@ -1,5 +1,6 @@
 use crate::{
-    ansi::{AnsiRGB, BLUE, CLEAR, Csi, EL, ESC, GREEN, MAGENTA, RED, RESET, YELLOW, bold},
+    ansi::colors::{AnsiRGB, BLUE, BOLD, GREEN, MAGENTA, RED, RESET, YELLOW},
+    ansi::{CLEAR, Csi, EL},
     cryptography::check_hash,
     storage::{PasswordArray, get_master_password},
 };
@@ -15,8 +16,8 @@ use std::{
     ops::{Add, Sub},
 };
 
-const V: &str = "✔ ";
-const W: &str = "⚠️  ";
+const V: &str = "✔";
+const W: &str = "⚠︎";
 const HELP_MESSAGE: &str = "There are a total of 7 commands (which have alaises):\n\nchoose (no other alias): Chooses a directory. Only accepts directories with the correct files\ncd (no other alias): Changes current working directory\nls (no other alias): Lists the contents of the current working directory\nexit (q, quit, ex): Exits the program\nclear (c, cls): clears the screen\nnew (init, new_session, make): clears the screen and prompts the user for the new directories name and the master password to store the hash in the master_password file\nhelp (h, ?): Shows this help\n\nUsage:\n\nCommands with no arguments: ls, exit, clear, help, new\n\ncd: cd {dirname}\nchoose: choose {dirname}";
 
 const YESES: [&str; 15] = [
@@ -44,6 +45,23 @@ const CHARS: [&str; 94] = [
     "5", "6", "7", "8", "9", "!", "\"", "#", "$", "%", "&", "'", "(", ")", "*", "+", ",", "-", ".",
     "/", ":", ";", "<", "=", ">", "?", "@", "[", "\\", "]", "^", "_", "`", "{", "|", "}", "~",
 ];
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum Token {
+    Command(String),
+    Text(String),
+    Whitespace(char),
+}
+
+impl Display for Token {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Text(i) => write!(f, "{i}"),
+            Self::Whitespace(w) => write!(f, "{w}"),
+            Self::Command(c) => write!(f, "{BLUE}{c}{RESET}"),
+        }
+    }
+}
 
 pub struct Menu {
     options: Vec<String>,
@@ -213,33 +231,28 @@ impl Sub for LimitedUint {
 }
 
 fn evaluate_password(password: &str) {
-    let mut uni = HashSet::new();
-    for chr in password.chars() {
-        uni.insert(chr);
-    }
     let (length, upper, digits, lower, unique) = (
         password.chars().count(),
         password.chars().filter(|s| s.is_uppercase()).count(),
         password.chars().filter(|s| s.is_ascii_digit()).count(),
         password.chars().filter(|s| s.is_lowercase()).count(),
-        uni.len(),
+        password.chars().collect::<HashSet<char>>().iter().count(),
     );
-    drop(uni);
     let special = length - (upper + digits + lower);
     let results: [bool; 5] = [length < 16, upper < 5, unique < 8, digits < 5, special < 4];
     let messages = [
         "The length of the password should be 16 characters long",
         "The password should have atleast 5 capital letters",
-        "The password should have atleast 8 unigue characters",
+        "The password should have atleast 8 unique characters",
         "The password should have atleast 5 digits",
         "The password should have atleast 4 special characters",
     ];
     for (message, suggestion) in zip(messages, results) {
         if suggestion {
-            println!("{W} {GREEN}{message}{RESET}");
+            println!("{W} {YELLOW}{message}{RESET}");
             continue;
         }
-        println!("{V} {YELLOW}{message}{RESET}");
+        println!("{V}{GREEN} {message}{RESET}");
     }
 }
 
@@ -309,7 +322,7 @@ fn list_directory(path: &str) {
         let p = p.unwrap();
         if p.path().is_dir() {
             println!(
-                "{BLUE}{bold}{}{RESET}",
+                "{BLUE}{BOLD}{}{RESET}",
                 p.path().as_path().file_name().unwrap().to_str().unwrap()
             );
             continue;
@@ -321,7 +334,53 @@ fn list_directory(path: &str) {
     }
 }
 
-pub fn inputi(prompt: impl Display, default: String) -> String {
+fn parse(string: &String, commands: &[String]) -> Vec<Token> {
+    let mut buffer: String = String::new();
+    let mut tokens: Vec<Token> = vec![];
+    let mut is_first_command: bool = true;
+    let mut no_text_token: bool = true;
+    for character in string.chars() {
+        if [' ', '\t'].contains(&character) {
+            if commands.contains(&buffer) && is_first_command && no_text_token {
+                tokens.push(Token::Command(buffer.clone()));
+                buffer.clear();
+                is_first_command = false;
+            } else if !buffer.is_empty() {
+                tokens.push(Token::Text(buffer.clone()));
+                buffer.clear();
+                no_text_token = false
+            }
+            tokens.push(Token::Whitespace(character));
+        } else {
+            buffer.push(character)
+        }
+    }
+    if !buffer.is_empty() {
+        if commands.contains(&buffer) && is_first_command && no_text_token {
+            tokens.push(Token::Command(buffer.clone()));
+            buffer.clear();
+        } else {
+            tokens.push(Token::Text(buffer.clone()));
+            buffer.clear();
+        }
+    }
+    tokens
+}
+
+fn highlight(commands: &[String], string: &String) -> String {
+    let mut result = String::new();
+    for token in parse(string, commands) {
+        result.push_str(format!("{token}").as_str())
+    }
+    result
+}
+
+pub fn inputi(
+    prompt: impl Display,
+    default: String,
+    highlight_text: bool,
+    commands: &[String],
+) -> String {
     let getch = Getch::new();
     let mut buffer = String::new();
     let mut stdout = io::stdout();
@@ -336,6 +395,7 @@ pub fn inputi(prompt: impl Display, default: String) -> String {
                 } else if buffer.is_empty() {
                     continue;
                 }
+                println!();
                 return buffer;
             }
             Ok(Key::Char(c)) => {
@@ -351,13 +411,32 @@ pub fn inputi(prompt: impl Display, default: String) -> String {
             Ok(_key) => {}
             Err(e) => eprintln!("{e}"),
         }
-        print!(
-            "{}{}{}",
-            Csi::CPL.ansi(),
-            Csi::CNL.ansi(),
-            Csi::El(EL::EL2).ansi()
-        );
-        print!("{prompt}{buffer}");
+        if prompt.to_string().lines().count() == 2 {
+            print!(
+                "{}{}{}{}{}",
+                Csi::CPL.ansi(),
+                Csi::CPL.ansi(),
+                Csi::El(EL::EL2).ansi(),
+                Csi::CNL.ansi(),
+                Csi::El(EL::EL2).ansi(),
+            );
+            let _ = stdout.flush();
+        } else {
+            print!(
+                "{}{}{}",
+                Csi::CPL.ansi(),
+                Csi::CNL.ansi(),
+                Csi::El(EL::EL2).ansi()
+            );
+            let _ = stdout.flush();
+        }
+        if highlight_text {
+            print!("{prompt}{}", highlight(commands, &buffer));
+            let _ = stdout.flush();
+        } else {
+            print!("{prompt}{buffer}");
+            let _ = stdout.flush();
+        }
         let _ = stdout.flush();
     }
 }
@@ -380,7 +459,7 @@ fn process_alias(alias: &str) -> &str {
 
 fn new_directory() -> (String, SecretString, bool) {
     loop {
-        let directory_name: String = inputi("Directory name: ", String::new());
+        let directory_name: String = inputi("Directory name: ", String::new(), false, &[]);
         if !fs::exists(&directory_name).unwrap() {
             let master_password = new_password_input("Master password: ");
             crate::storage::initialize_directory(&directory_name, master_password.expose_secret());
@@ -441,7 +520,7 @@ fn process_command(command: &str) {
     } else if command == "help" {
         println!("{HELP_MESSAGE}");
     } else {
-        println!("{RED}{bold}Command not found{RESET}");
+        println!("{RED}{BOLD}Command not found{RESET}");
     }
 }
 
@@ -455,7 +534,32 @@ pub fn cd(directory_name: &str) {
 /// Gives a prompt to the user to choose a directory
 pub fn directory_selector() -> (String, SecretString, bool) {
     loop {
-        let usr = input(format!("{BLUE}{}{RESET}\n{MAGENTA}❯ {RESET}", getcwd()).as_bytes());
+        let current_directory = getcwd();
+        let usr = inputi(
+            format!("{BLUE}{current_directory}{RESET} {MAGENTA}❯ {RESET}"),
+            String::new(),
+            true,
+            &[
+                "exit".to_string(),
+                "ex".to_string(),
+                "q".to_string(),
+                "quit".to_string(),
+                "new".to_string(),
+                "init".to_string(),
+                "make".to_string(),
+                "help".to_string(),
+                "new_session".to_string(),
+                "ls".to_string(),
+                "choose".to_string(),
+                "cd".to_string(),
+                "clear".to_string(),
+                "help".to_string(),
+                "h".to_string(),
+                "c".to_string(),
+                "cls".to_string(),
+                "?".to_string(),
+            ],
+        );
         let sp: Vec<&str> = usr.split_whitespace().collect();
         if sp.is_empty() {
             continue;
@@ -485,7 +589,7 @@ pub fn directory_selector() -> (String, SecretString, bool) {
             let master_password = prompt_master_password(&directory_name);
             return (directory_name, master_password, false);
         } else {
-            println!("{RED}{bold}Command not found{RESET}");
+            println!("{RED}{BOLD}Command not found{RESET}");
         }
     }
 }
@@ -516,7 +620,7 @@ pub fn generate_password(length: u32) -> String {
 /// Prompts the user for a number
 pub fn prompt_number(prompt: &str, default: String) -> i32 {
     loop {
-        let number = inputi(prompt, default.clone());
+        let number = inputi(prompt, default.clone(), false, &[]);
         if !number.bytes().all(|b| b.is_ascii_digit()) {
             continue;
         }
@@ -530,7 +634,7 @@ pub fn prompt_number(prompt: &str, default: String) -> i32 {
 pub fn run(index: usize, password_array: &mut PasswordArray) {
     match index {
         0 => {
-            let service = inputi("Service: ", String::new());
+            let service = inputi("Service: ", String::new(), false, &[]);
             let password = new_password_input("Password: ");
             let result = password_array.add_password(service, password);
             if result.is_err() {
@@ -539,7 +643,7 @@ pub fn run(index: usize, password_array: &mut PasswordArray) {
             }
         }
         1 => {
-            let service = inputi("Service: ", String::new());
+            let service = inputi("Service: ", String::new(), false, &[]);
             let new_password = new_password_input("Password: ");
             let result = password_array.edit_password(service, new_password);
             if result.is_err() {
@@ -548,7 +652,7 @@ pub fn run(index: usize, password_array: &mut PasswordArray) {
             }
         }
         2 => {
-            let service = inputi("Service: ", String::new());
+            let service = inputi("Service: ", String::new(), false, &[]);
             let result = password_array.remove_password(service);
             if result.is_err() {
                 println!("{}", result.unwrap_err());
@@ -568,7 +672,7 @@ pub fn run(index: usize, password_array: &mut PasswordArray) {
             println!("\nGenerated password: {generated_password}");
             let answer = input(b"Do you want to add this password? ");
             if YESES.iter().any(|y| *y == answer.to_lowercase().trim()) {
-                let service = inputi("Service: ", String::new());
+                let service = inputi("Service: ", String::new(), false, &[]);
                 let res = password_array
                     .add_password(service, secrecy::SecretString::from(generated_password));
                 if res.is_err() {
