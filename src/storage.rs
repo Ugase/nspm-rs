@@ -65,7 +65,7 @@ impl PasswordArray {
         let _ = fs::remove_dir_all(&self.directory_name);
         initialize_directory(&self.directory_name, self.master_password.expose_secret());
         self.encrypt(print_state, &mut progress);
-        for (index, password) in zip(0..self.passwords.len(), self.passwords.clone()) {
+        for (index, password) in self.passwords.iter().enumerate() {
             let password_location = format!("{}/passwords/password_{index}", self.directory_name);
             let service_location = format!("{}/services/service_{index}", self.directory_name);
             let salt_location = format!("{}/salts/salt_{index}", self.directory_name);
@@ -81,7 +81,7 @@ impl PasswordArray {
                 let _ = buf.flush();
                 print!("{} Saving, {}", progress, password.service);
                 let _ = buf.flush();
-                std::thread::sleep(Duration::from_millis(45));
+                sleep(45);
             }
             password.save(&password_location, &salt_location, &service_location);
         }
@@ -142,7 +142,7 @@ impl PasswordArray {
                     self.passwords.get(index).unwrap().service
                 );
                 let _ = buf.flush();
-                std::thread::sleep(Duration::from_millis(45));
+                sleep(45);
             }
         }
         self.decrypt(print_state, &mut progress);
@@ -161,32 +161,24 @@ impl PasswordArray {
         ));
         Ok(())
     }
-    fn find_index(&self, service_name: String) -> Option<usize> {
-        let services = self.get_services();
-        for (index, service) in zip(0..services.len(), services) {
-            if service == service_name {
-                return Some(index);
-            }
-        }
-        None
-    }
     /// (hopefully self explanatory)
     pub fn edit_password(
         &mut self,
         service_name: String,
         new_pass: SecretString,
     ) -> Result<(), &str> {
-        if !self.get_services().contains(&service_name) {
-            return Err("password does not exist");
+        let index = self.get_services().iter().position(|s| *s == service_name);
+        if index.is_none() {
+            return Err("couldn't find service");
         }
-        let index: usize = self.find_index(service_name).unwrap();
+        let index = index.unwrap();
         let a: &mut Password = self.passwords.get_mut(index).unwrap();
         let _ = a.edit_password(new_pass);
         Ok(())
     }
     /// (guess)
     pub fn remove_password(&mut self, service_name: String) -> Result<(), &str> {
-        let index = self.find_index(service_name);
+        let index = self.get_services().iter().position(|s| *s == service_name);
         if index.is_none() {
             return Err("couldn't find service");
         }
@@ -194,7 +186,7 @@ impl PasswordArray {
         self.passwords.remove(index);
         Ok(())
     }
-    fn decrypt(&mut self, print_state: bool, pro: &mut ProgressBar) {
+    fn decrypt(&mut self, print_state: bool, progress_bar: &mut ProgressBar) {
         for password in self.passwords.iter_mut() {
             if print_state {
                 let mut buf = std::io::stdout();
@@ -205,8 +197,8 @@ impl PasswordArray {
                     Csi::El(EL::EL2).ansi()
                 );
                 let _ = buf.flush();
-                pro.increse_n();
-                print!("{} Decrypting, {}", pro, password.service);
+                progress_bar.increse_n();
+                print!("{} Decrypting, {}", progress_bar, password.service);
                 let _ = buf.flush();
             }
             password.decrypt().unwrap();
@@ -219,13 +211,13 @@ impl PasswordArray {
                     Csi::El(EL::EL2).ansi()
                 );
                 let _ = buf.flush();
-                pro.increse_n();
-                print!("{} Decrypted, {}", pro, password.service);
+                progress_bar.increse_n();
+                print!("{} Decrypted, {}", progress_bar, password.service);
                 let _ = buf.flush();
             }
         }
     }
-    fn encrypt(&mut self, print_state: bool, pro: &mut ProgressBar) {
+    fn encrypt(&mut self, print_state: bool, progress_bar: &mut ProgressBar) {
         for password in self.passwords.iter_mut() {
             if print_state {
                 let mut buf = std::io::stdout();
@@ -236,8 +228,8 @@ impl PasswordArray {
                     Csi::El(EL::EL2).ansi()
                 );
                 let _ = buf.flush();
-                pro.increse_n();
-                print!("{} Encrypting, {}", pro, password.service);
+                progress_bar.increse_n();
+                print!("{} Encrypting, {}", progress_bar, password.service);
                 let _ = buf.flush();
             }
             password.encrypt().unwrap();
@@ -250,8 +242,8 @@ impl PasswordArray {
                     Csi::El(EL::EL2).ansi()
                 );
                 let _ = buf.flush();
-                pro.increse_n();
-                print!("{} Encrypted, {}", pro, password.service);
+                progress_bar.increse_n();
+                print!("{} Encrypted, {}", progress_bar, password.service);
                 let _ = buf.flush();
             }
         }
@@ -272,12 +264,8 @@ impl PasswordArray {
             .add_rows(result);
         tables
     }
-    fn get_services(&self) -> Vec<String> {
-        let mut res = vec![];
-        for password in self.passwords.clone() {
-            res.push(password.service);
-        }
-        res
+    pub fn get_services(&self) -> Vec<String> {
+        self.passwords.iter().map(|p| p.service.clone()).collect()
     }
 }
 
@@ -369,15 +357,13 @@ fn create_master_password(master_password: &str, dir_name: &str) {
         format!("{dir_name}/master_password"),
         hash(master_password.as_bytes(), &salt).unwrap(),
     );
-    let _ = fs::write(format!("{dir_name}/master_password_salt"), salt.as_str());
 }
 
 /// Gets master password and its salt the directory must exist and is valid for this function to
 /// work
-pub fn get_master_password(dir_name: &str) -> Result<[String; 2], std::io::Error> {
+pub fn get_master_password(dir_name: &str) -> Result<String, std::io::Error> {
     let master_password = fs::read_to_string(format!("{dir_name}/master_password"))?;
-    let salt = fs::read_to_string(format!("{dir_name}/master_password_salt"))?;
-    Ok([master_password, salt])
+    Ok(master_password)
 }
 
 /// Initializes the directories and makes the master password
@@ -392,10 +378,7 @@ pub fn initialize_directory(name: &str, master_password: &str) {
 
 /// Checks if the directory and the correct files and directories exists
 pub fn verify_directory(dir_name: &str) -> bool {
-    let list: [String; 2] = [
-        format!("{dir_name}/master_password"),
-        format!("{dir_name}/master_password_salt"),
-    ];
+    let list: [String; 1] = [format!("{dir_name}/master_password")];
     let dirs = [
         format!("{dir_name}/salts"),
         format!("{dir_name}/passwords"),
@@ -416,4 +399,8 @@ pub fn verify_directory(dir_name: &str) -> bool {
         }
     }
     true
+}
+
+fn sleep(duration_millis: u64) {
+    std::thread::sleep(Duration::from_millis(duration_millis));
 }

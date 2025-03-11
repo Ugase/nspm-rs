@@ -3,13 +3,91 @@ use std::fmt::Display;
 pub const ESC: &str = "\x1b[";
 
 pub const RESET: &str = "\x1b[0m";
+pub const BLACK: &str = "\x1b[30m";
 pub const RED: &str = "\x1b[31m";
 pub const GREEN: &str = "\x1b[32m";
 pub const YELLOW: &str = "\x1b[33m";
 pub const BLUE: &str = "\x1b[34m";
 pub const MAGENTA: &str = "\x1b[35m";
+pub const CYAN: &str = "\x1b[36m";
+pub const WHITE: &str = "\x1b[37m";
+pub const BRIGHT_BLACK: &str = "\x1b[90m";
+pub const BRIGHT_RED: &str = "\x1b[91m";
+pub const BRIGHT_GREEN: &str = "\x1b[92m";
+pub const BRIGHT_YELLOW: &str = "\x1b[93m";
+pub const BRIGHT_BLUE: &str = "\x1b[94m";
+pub const BRIGHT_MAGENTA: &str = "\x1b[95m";
+pub const BRIGHT_CYAN: &str = "\x1b[96m";
+pub const BRIGHT_WHITE: &str = "\x1b[97m";
 
 pub const BOLD: &str = "\x1b[1m";
+
+enum CBit {
+    BLACK,
+    GREEN,
+    WHITE,
+    BLUE,
+    CYAN,
+    YELLOW,
+    RED,
+    MAGENTA,
+}
+
+enum CBitBright {
+    BLACK,
+    GREEN,
+    WHITE,
+    BLUE,
+    CYAN,
+    YELLOW,
+    RED,
+    MAGENTA,
+}
+
+impl CBit {
+    fn ansi(&self) -> String {
+        match self {
+            CBit::BLACK => BLACK.to_string(),
+            CBit::RED => RED.to_string(),
+            CBit::GREEN => GREEN.to_string(),
+            CBit::YELLOW => YELLOW.to_string(),
+            CBit::BLUE => BLUE.to_string(),
+            CBit::MAGENTA => MAGENTA.to_string(),
+            CBit::CYAN => CYAN.to_string(),
+            CBit::WHITE => WHITE.to_string(),
+        }
+    }
+}
+
+impl CBitBright {
+    fn ansi(&self) -> String {
+        match self {
+            CBitBright::BLACK => BRIGHT_BLACK.to_string(),
+            CBitBright::RED => BRIGHT_RED.to_string(),
+            CBitBright::GREEN => BRIGHT_GREEN.to_string(),
+            CBitBright::YELLOW => BRIGHT_YELLOW.to_string(),
+            CBitBright::BLUE => BRIGHT_BLUE.to_string(),
+            CBitBright::MAGENTA => BRIGHT_MAGENTA.to_string(),
+            CBitBright::CYAN => BRIGHT_CYAN.to_string(),
+            CBitBright::WHITE => BRIGHT_WHITE.to_string(),
+        }
+    }
+}
+
+enum Bit {
+    Cbit(CBit),
+    Bright(CBitBright),
+}
+
+pub enum Color {
+    RGB(AnsiRGB),
+    Bit(Bit),
+}
+
+pub struct ColoredText {
+    color: Color,
+    text: String,
+}
 
 #[derive(Debug, Clone, Copy)]
 pub struct AnsiRGB {
@@ -52,5 +130,17 @@ impl AnsiRGB {
 impl Display for AnsiRGB {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{ESC}38;2;{};{};{}m", self.r, self.g, self.b)
+    }
+}
+
+impl Display for ColoredText {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.color {
+            Color::RGB(rgb) => write!(f, "{rgb}{}{RESET}", self.text),
+            Color::Bit(bit) => match bit {
+                Bit::Cbit(cbit) => write!(f, "{}{}{RESET}", cbit.ansi(), self.text),
+                Bit::Bright(cbitbright) => write!(f, "{}{}{RESET}", cbitbright.ansi(), self.text),
+            },
+        }
     }
 }

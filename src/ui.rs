@@ -1,18 +1,19 @@
 use crate::{
-    ansi::colors::{AnsiRGB, BLUE, BOLD, GREEN, MAGENTA, RED, RESET, YELLOW},
+    ansi::colors::{AnsiRGB, BLUE, BOLD, GREEN, RED, RESET, YELLOW},
     ansi::{CLEAR, Csi, EL},
+    con::*,
     cryptography::check_hash,
-    storage::{PasswordArray, get_master_password},
+    storage::get_master_password,
 };
 use getch_rs::{Getch, Key};
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use secrecy::{ExposeSecret, SecretString};
+use std::path::Path;
 use std::{
     collections::HashSet,
     fmt::Display,
     fs,
     io::{self, Write},
-    iter::zip,
     ops::{Add, Sub},
 };
 
@@ -20,7 +21,7 @@ const V: &str = "✔";
 const W: &str = "⚠︎";
 const HELP_MESSAGE: &str = "There are a total of 7 commands (which have alaises):\n\nchoose (no other alias): Chooses a directory. Only accepts directories with the correct files\ncd (no other alias): Changes current working directory\nls (no other alias): Lists the contents of the current working directory\nexit (q, quit, ex): Exits the program\nclear (c, cls): clears the screen\nnew (init, new_session, make): clears the screen and prompts the user for the new directories name and the master password to store the hash in the master_password file\nhelp (h, ?): Shows this help\n\nUsage:\n\nCommands with no arguments: ls, exit, clear, help, new\n\ncd: cd {dirname}\nchoose: choose {dirname}";
 
-const YESES: [&str; 15] = [
+pub const YESES: [&str; 15] = [
     "y",
     "yes",
     "ye",
@@ -45,12 +46,28 @@ const CHARS: [&str; 94] = [
     "5", "6", "7", "8", "9", "!", "\"", "#", "$", "%", "&", "'", "(", ")", "*", "+", ",", "-", ".",
     "/", ":", ";", "<", "=", ">", "?", "@", "[", "\\", "]", "^", "_", "`", "{", "|", "}", "~",
 ];
-
+pub const ALL_FLAGS: [InputFlags; 4] = [
+    InputFlags::HighlightInput,
+    InputFlags::IsBlacklist,
+    InputFlags::DenyEmptyInput,
+    InputFlags::AllowBlacklist,
+];
+pub const NO_FLAGS: &[InputFlags; 0] = &[];
+pub const NO_COMMANDS: &[String; 0] = &[];
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum Token {
+    InvalidCommand(String),
     Command(String),
     Text(String),
     Whitespace(char),
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum InputFlags {
+    DenyEmptyInput,
+    HighlightInput,
+    IsBlacklist,
+    AllowBlacklist,
 }
 
 impl Display for Token {
@@ -59,6 +76,7 @@ impl Display for Token {
             Self::Text(i) => write!(f, "{i}"),
             Self::Whitespace(w) => write!(f, "{w}"),
             Self::Command(c) => write!(f, "{BLUE}{c}{RESET}"),
+            Self::InvalidCommand(ic) => write!(f, "{RED}{ic}{RESET}"),
         }
     }
 }
@@ -71,7 +89,7 @@ pub struct Menu {
 }
 
 impl Menu {
-    pub fn new(options: Vec<String>, prompt: String, icon: String) -> Self {
+    pub fn new(menu_config: MenuConfig, options: Vec<String>) -> Self {
         let selection = LimitedUint {
             value: 0,
             minimum: 0,
@@ -80,14 +98,15 @@ impl Menu {
         Self {
             options,
             selection,
-            prompt,
-            icon,
+            prompt: menu_config.prompt,
+            icon: menu_config.icon,
         }
     }
 
     pub fn interact(&mut self) -> usize {
         println!("{CLEAR}");
         let getch = Getch::new();
+        println!("{}", self.prompt);
         self.print_items();
         loop {
             let chr = getch.getch();
@@ -236,18 +255,18 @@ fn evaluate_password(password: &str) {
         password.chars().filter(|s| s.is_uppercase()).count(),
         password.chars().filter(|s| s.is_ascii_digit()).count(),
         password.chars().filter(|s| s.is_lowercase()).count(),
-        password.chars().collect::<HashSet<char>>().iter().count(),
+        password.chars().collect::<HashSet<char>>().len(),
     );
     let special = length - (upper + digits + lower);
-    let results: [bool; 5] = [length < 16, upper < 5, unique < 8, digits < 5, special < 4];
+    let results: [bool; 5] = [length < 15, upper < 4, unique < 7, digits < 4, special < 4];
     let messages = [
-        "The length of the password should be 16 characters long",
-        "The password should have atleast 5 capital letters",
-        "The password should have atleast 8 unique characters",
-        "The password should have atleast 5 digits",
+        "The length of the password should be 15 characters long",
+        "The password should have atleast 4 capital letters",
+        "The password should have atleast 7 unique characters",
+        "The password should have atleast 4 digits",
         "The password should have atleast 4 special characters",
     ];
-    for (message, suggestion) in zip(messages, results) {
+    for (message, suggestion) in messages.iter().zip(results) {
         if suggestion {
             println!("{W} {YELLOW}{message}{RESET}");
             continue;
@@ -292,7 +311,7 @@ pub fn password_input(prompt: impl Display) -> SecretString {
     let mut password = String::new();
     println!("{CLEAR}");
     print!("{prompt}");
-    let mut buf = std::io::stdout();
+    let mut buf = io::stdout();
     let _ = buf.flush();
     loop {
         let chr = getch.getch();
@@ -319,36 +338,40 @@ pub fn password_input(prompt: impl Display) -> SecretString {
 
 fn list_directory(path: &str) {
     for p in fs::read_dir(path).unwrap() {
-        let p = p.unwrap();
-        if p.path().is_dir() {
-            println!(
-                "{BLUE}{BOLD}{}{RESET}",
-                p.path().as_path().file_name().unwrap().to_str().unwrap()
-            );
+        let path = p.unwrap().path();
+        let path_str = path.as_path().file_name().unwrap().to_str().unwrap();
+        if path.is_dir() {
+            println!("{BLUE}{BOLD}{path_str}{RESET}");
             continue;
         }
-        println!(
-            "{}",
-            p.path().as_path().file_name().unwrap().to_str().unwrap()
-        );
+        println!("{path_str}");
     }
 }
 
-fn parse(string: &String, commands: &[String]) -> Vec<Token> {
+fn parse(string: &String, commands: &[String], parse_invalid: bool) -> Vec<Token> {
+    if string.is_empty() {
+        return Vec::new();
+    }
     let mut buffer: String = String::new();
     let mut tokens: Vec<Token> = vec![];
     let mut is_first_command: bool = true;
     let mut no_text_token: bool = true;
     for character in string.chars() {
         if [' ', '\t'].contains(&character) {
-            if commands.contains(&buffer) && is_first_command && no_text_token {
-                tokens.push(Token::Command(buffer.clone()));
-                buffer.clear();
-                is_first_command = false;
-            } else if !buffer.is_empty() {
-                tokens.push(Token::Text(buffer.clone()));
-                buffer.clear();
-                no_text_token = false
+            if !buffer.is_empty() {
+                if commands.contains(&buffer) && is_first_command && no_text_token {
+                    if parse_invalid {
+                        tokens.push(Token::InvalidCommand(buffer.clone()))
+                    } else {
+                        tokens.push(Token::Command(buffer.clone()));
+                    }
+                    buffer.clear();
+                    is_first_command = false;
+                } else {
+                    tokens.push(Token::Text(buffer.clone()));
+                    buffer.clear();
+                    no_text_token = false;
+                }
             }
             tokens.push(Token::Whitespace(character));
         } else {
@@ -357,7 +380,11 @@ fn parse(string: &String, commands: &[String]) -> Vec<Token> {
     }
     if !buffer.is_empty() {
         if commands.contains(&buffer) && is_first_command && no_text_token {
-            tokens.push(Token::Command(buffer.clone()));
+            if parse_invalid {
+                tokens.push(Token::InvalidCommand(buffer.clone()))
+            } else {
+                tokens.push(Token::Command(buffer.clone()));
+            }
             buffer.clear();
         } else {
             tokens.push(Token::Text(buffer.clone()));
@@ -367,20 +394,18 @@ fn parse(string: &String, commands: &[String]) -> Vec<Token> {
     tokens
 }
 
-fn highlight(commands: &[String], string: &String) -> String {
-    let mut result = String::new();
-    for token in parse(string, commands) {
-        result.push_str(format!("{token}").as_str())
-    }
-    result
-}
-
-pub fn inputi(
+pub fn input(
     prompt: impl Display,
     default: String,
-    highlight_text: bool,
     commands: &[String],
+    flags: &[InputFlags],
 ) -> String {
+    let (deny_empty_input, is_blacklist, highlight_text, allow_blacklist) = (
+        flags.contains(&InputFlags::DenyEmptyInput),
+        flags.contains(&InputFlags::IsBlacklist),
+        flags.contains(&InputFlags::HighlightInput),
+        flags.contains(&InputFlags::AllowBlacklist),
+    );
     let getch = Getch::new();
     let mut buffer = String::new();
     let mut stdout = io::stdout();
@@ -390,10 +415,24 @@ pub fn inputi(
         let chr = getch.getch();
         match chr {
             Ok(Key::Char('\r')) => {
+                if deny_empty_input && buffer.is_empty() {
+                    continue;
+                }
                 if buffer.is_empty() && !default.is_empty() {
                     return default;
-                } else if buffer.is_empty() {
-                    continue;
+                }
+                if is_blacklist && !allow_blacklist {
+                    if !parse(&buffer, commands, true)
+                        .iter()
+                        .filter(|e| match e {
+                            Token::InvalidCommand(_) => true,
+                            _ => false,
+                        })
+                        .collect::<Vec<&Token>>()
+                        .is_empty()
+                    {
+                        continue;
+                    }
                 }
                 println!();
                 return buffer;
@@ -411,27 +450,22 @@ pub fn inputi(
             Ok(_key) => {}
             Err(e) => eprintln!("{e}"),
         }
-        if prompt.to_string().lines().count() == 2 {
-            print!(
-                "{}{}{}{}{}",
-                Csi::CPL.ansi(),
-                Csi::CPL.ansi(),
-                Csi::El(EL::EL2).ansi(),
-                Csi::CNL.ansi(),
-                Csi::El(EL::EL2).ansi(),
-            );
-            let _ = stdout.flush();
-        } else {
-            print!(
-                "{}{}{}",
-                Csi::CPL.ansi(),
-                Csi::CNL.ansi(),
-                Csi::El(EL::EL2).ansi()
-            );
-            let _ = stdout.flush();
-        }
+        print!(
+            "{}{}{}",
+            Csi::CPL.ansi(),
+            Csi::CNL.ansi(),
+            Csi::El(EL::EL2).ansi()
+        );
+        let _ = stdout.flush();
         if highlight_text {
-            print!("{prompt}{}", highlight(commands, &buffer));
+            print!(
+                "{prompt}{}",
+                parse(&buffer, commands, is_blacklist)
+                    .iter()
+                    .map(|t| t.to_string())
+                    .collect::<Vec<String>>()
+                    .concat()
+            );
             let _ = stdout.flush();
         } else {
             print!("{prompt}{buffer}");
@@ -441,46 +475,29 @@ pub fn inputi(
     }
 }
 
-fn process_alias(alias: &str) -> &str {
-    let alias = alias.trim();
-    if ["choose", "cd", "ls", "exit", "clear", "new", "help"].contains(&alias) {
-        return alias;
-    } else if ["q", "quit", "ex"].contains(&alias) {
-        return "exit";
-    } else if ["c", "cls"].contains(&alias) {
-        return "clear";
-    } else if ["init", "new_session", "make", "code"].contains(&alias) {
-        return "new";
-    } else if ["h", "?"].contains(&alias) {
-        return "help";
-    }
-    ""
-}
-
 fn new_directory() -> (String, SecretString, bool) {
     loop {
-        let directory_name: String = inputi("Directory name: ", String::new(), false, &[]);
-        if !fs::exists(&directory_name).unwrap() {
-            let master_password = new_password_input("Master password: ");
-            crate::storage::initialize_directory(&directory_name, master_password.expose_secret());
-            return (directory_name, master_password, true);
-        }
+        let directory_name: String = input(
+            "Directory name: ",
+            String::new(),
+            &fs::read_dir(getcwd())
+                .unwrap()
+                .map(|p| p.unwrap().file_name().into_string().unwrap())
+                .collect::<Vec<String>>(),
+            &[
+                InputFlags::IsBlacklist,
+                InputFlags::DenyEmptyInput,
+                InputFlags::HighlightInput,
+            ],
+        );
+        let master_password = new_password_input("Master password: ");
+        crate::storage::initialize_directory(&directory_name, master_password.expose_secret());
         println!();
+        return (directory_name, master_password, true);
     }
 }
 
-fn input(prompt: &[u8]) -> String {
-    let mut buffer = String::new();
-    let mut stdout = std::io::stdout();
-    let _ = stdout.write(prompt);
-    stdout.flush().unwrap();
-    std::io::stdin()
-        .read_line(&mut buffer)
-        .expect("Something went wrong");
-    buffer
-}
-
-fn getcwd() -> String {
+pub fn getcwd() -> String {
     std::env::current_dir()
         .unwrap()
         .as_path()
@@ -489,9 +506,22 @@ fn getcwd() -> String {
         .to_string()
 }
 
+pub fn getcwd_short() -> String {
+    let home_dir = std::env::vars().find(|key_value| key_value.0 == "HOME".to_string());
+    if home_dir.is_some() {
+        let home_dir = home_dir.unwrap().1;
+        if getcwd().len() >= home_dir.len() {
+            if getcwd()[..home_dir.len()] == home_dir {
+                return getcwd().replacen(&home_dir, "~", 1);
+            }
+        }
+    }
+    getcwd()
+}
+
 fn check_master_password(directory_name: &str, input: &str) -> bool {
     let hashed_master_password = get_master_password(directory_name).unwrap();
-    if !check_hash(input, &hashed_master_password[0]) {
+    if !check_hash(input, &hashed_master_password) {
         return false;
     }
     true
@@ -526,39 +556,31 @@ fn process_command(command: &str) {
 
 /// Changes current working directory
 pub fn cd(directory_name: &str) {
-    if std::env::set_current_dir(format!("{}/{}", getcwd(), directory_name).trim()).is_err() {
-        eprintln!("Something went wrong")
+    let is_absolute_path = directory_name[..0] == *"/";
+    if !is_absolute_path {
+        let res = std::env::set_current_dir(format!("{}/{}", getcwd(), directory_name).trim());
+        if res.is_err() {
+            let res = res.unwrap_err();
+            eprintln!("Error: {res}")
+        }
+        return;
+    }
+    let res = std::env::set_current_dir(directory_name);
+    if res.is_err() {
+        let res = res.unwrap_err();
+        eprintln!("Error: {res}")
     }
 }
 
 /// Gives a prompt to the user to choose a directory
 pub fn directory_selector() -> (String, SecretString, bool) {
+    let commands = all_commands();
     loop {
-        let current_directory = getcwd();
-        let usr = inputi(
-            format!("{BLUE}{current_directory}{RESET} {MAGENTA}❯ {RESET}"),
+        let usr = input(
+            directory_selector_prompt(),
             String::new(),
-            true,
-            &[
-                "exit".to_string(),
-                "ex".to_string(),
-                "q".to_string(),
-                "quit".to_string(),
-                "new".to_string(),
-                "init".to_string(),
-                "make".to_string(),
-                "help".to_string(),
-                "new_session".to_string(),
-                "ls".to_string(),
-                "choose".to_string(),
-                "cd".to_string(),
-                "clear".to_string(),
-                "help".to_string(),
-                "h".to_string(),
-                "c".to_string(),
-                "cls".to_string(),
-                "?".to_string(),
-            ],
+            &commands,
+            &[InputFlags::HighlightInput],
         );
         let sp: Vec<&str> = usr.split_whitespace().collect();
         if sp.is_empty() {
@@ -574,12 +596,15 @@ pub fn directory_selector() -> (String, SecretString, bool) {
             process_command(command);
             continue;
         }
-        let (command, command_input): (&str, &str) = (process_alias(sp[0]), sp[1]);
+        let (command, command_input): (&str, &str) = (process_alias(sp[0]), &sp[1..].join(" "));
         if command == "cd" {
             cd(command_input);
         } else if command == "choose" {
-            let directory_name: String =
-                format!("{}/{}", getcwd(), command_input).trim().to_string();
+            let directory_name: String = Path::new(&getcwd())
+                .join(command_input)
+                .to_str()
+                .unwrap()
+                .to_string();
             if !crate::storage::verify_directory(&directory_name) {
                 println!(
                     "Either the directory provided doesn't exist or it doesn't have the correct files and folders"
@@ -620,70 +645,11 @@ pub fn generate_password(length: u32) -> String {
 /// Prompts the user for a number
 pub fn prompt_number(prompt: &str, default: String) -> i32 {
     loop {
-        let number = inputi(prompt, default.clone(), false, &[]);
+        let number = input(prompt, default.clone(), NO_COMMANDS, NO_FLAGS);
         if !number.bytes().all(|b| b.is_ascii_digit()) {
             continue;
         }
         let number: i32 = number.parse().unwrap();
         return number;
-    }
-}
-
-/// a massive match statement used for the functionality of the program
-/// this shouldn't be used any other projects
-pub fn run(index: usize, password_array: &mut PasswordArray) {
-    match index {
-        0 => {
-            let service = inputi("Service: ", String::new(), false, &[]);
-            let password = new_password_input("Password: ");
-            let result = password_array.add_password(service, password);
-            if result.is_err() {
-                println!("{}", result.unwrap_err());
-                pause();
-            }
-        }
-        1 => {
-            let service = inputi("Service: ", String::new(), false, &[]);
-            let new_password = new_password_input("Password: ");
-            let result = password_array.edit_password(service, new_password);
-            if result.is_err() {
-                println!("{}", result.unwrap_err());
-                pause();
-            }
-        }
-        2 => {
-            let service = inputi("Service: ", String::new(), false, &[]);
-            let result = password_array.remove_password(service);
-            if result.is_err() {
-                println!("{}", result.unwrap_err());
-                pause();
-            }
-        }
-        3 => {
-            println!("{}", password_array.table());
-            pause();
-        }
-        4 => {
-            let generated_password = generate_password(
-                prompt_number("Length of generated password: ", "14".to_string())
-                    .try_into()
-                    .unwrap(),
-            );
-            println!("\nGenerated password: {generated_password}");
-            let answer = input(b"Do you want to add this password? ");
-            if YESES.iter().any(|y| *y == answer.to_lowercase().trim()) {
-                let service = inputi("Service: ", String::new(), false, &[]);
-                let res = password_array
-                    .add_password(service, secrecy::SecretString::from(generated_password));
-                if res.is_err() {
-                    println!("{}", res.unwrap_err())
-                }
-            }
-        }
-        5 => {
-            password_array.save(true);
-            std::process::exit(0)
-        }
-        _ => {}
     }
 }
