@@ -556,19 +556,19 @@ fn process_command(command: &str) {
 
 /// Changes current working directory
 pub fn cd(directory_name: &str) {
-    let is_absolute_path = directory_name[..0] == *"/";
+    let is_absolute_path = directory_name[0..1] == *"/";
     if !is_absolute_path {
         let res = std::env::set_current_dir(format!("{}/{}", getcwd(), directory_name).trim());
         if res.is_err() {
             let res = res.unwrap_err();
-            eprintln!("Error: {res}")
+            eprintln!("{res}")
         }
         return;
     }
     let res = std::env::set_current_dir(directory_name);
     if res.is_err() {
         let res = res.unwrap_err();
-        eprintln!("Error: {res}")
+        eprintln!("{res}")
     }
 }
 
