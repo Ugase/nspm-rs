@@ -21,7 +21,6 @@ pub struct Password {
 }
 
 /// An array of [`Password`] that's better than an array of [`Password`]
-#[derive(Debug)]
 pub struct PasswordArray {
     passwords: Vec<Password>,
     master_password: SecretString,
