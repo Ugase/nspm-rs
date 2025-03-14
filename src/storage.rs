@@ -1,5 +1,4 @@
 use crate::{
-    ansi::colors::AnsiRGB,
     ansi::{Csi, EL},
     cryptography::{decrypt, encrypt, generate_salt, hash},
     ui::ProgressBar,
@@ -41,26 +40,7 @@ impl PasswordArray {
     /// # Panics
     /// Panics if directory doesn't exist
     pub fn save(&mut self, print_state: bool) {
-        let mut progress = ProgressBar {
-            filled: "#",
-            unfilled: "─",
-            length: 36,
-            n: 0,
-            d: (3 * self.passwords.len() as u32),
-            left: '[',
-            right: ']',
-            stop1: AnsiRGB { r: 255, g: 0, b: 0 },
-            stop2: AnsiRGB {
-                r: 255,
-                g: 255,
-                b: 0,
-            },
-            stop3: AnsiRGB {
-                r: 50,
-                g: 255,
-                b: 0,
-            },
-        };
+        let mut progress = ProgressBar::new(self.passwords.len() as u32 * 3);
         let _ = fs::remove_dir_all(&self.directory_name);
         initialize_directory(&self.directory_name, self.master_password.expose_secret());
         self.encrypt(print_state, &mut progress);
@@ -97,26 +77,7 @@ impl PasswordArray {
         let amount_of_passwords: usize = fs::read_dir(format!("{directory_name}/passwords"))
             .unwrap()
             .count();
-        let mut progress = ProgressBar {
-            filled: "#",
-            unfilled: "─",
-            length: 36,
-            n: 0,
-            d: (3 * amount_of_passwords as u32),
-            left: '[',
-            right: ']',
-            stop1: AnsiRGB { r: 255, g: 0, b: 0 },
-            stop2: AnsiRGB {
-                r: 255,
-                g: 255,
-                b: 0,
-            },
-            stop3: AnsiRGB {
-                r: 50,
-                g: 255,
-                b: 0,
-            },
-        };
+        let mut progress = ProgressBar::new(amount_of_passwords as u32 * 3);
         self.directory_name = directory_name.to_string();
         for index in 0..amount_of_passwords {
             self.passwords.push(Password::load(

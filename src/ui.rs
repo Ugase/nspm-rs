@@ -3,7 +3,7 @@ use crate::{
     ansi::{CLEAR, Csi, EL},
     con::*,
     cryptography::check_hash,
-    storage::get_master_password,
+    storage::{get_master_password, verify_directory},
 };
 use getch_rs::{Getch, Key};
 use rand::{Rng, SeedableRng, rngs::StdRng};
@@ -73,7 +73,7 @@ pub enum InputFlags {
 impl Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Text(i) => write!(f, "{i}"),
+            Self::Text(t) => write!(f, "{t}"),
             Self::Whitespace(w) => write!(f, "{w}"),
             Self::Command(c) => write!(f, "{BLUE}{c}{RESET}"),
             Self::InvalidCommand(ic) => write!(f, "{RED}{ic}{RESET}"),
@@ -168,6 +168,28 @@ pub struct ProgressBar<'a> {
 }
 
 impl ProgressBar<'_> {
+    pub fn new(d: u32) -> Self {
+        Self {
+            n: 0,
+            d,
+            left: '[',
+            right: ']',
+            filled: "#",
+            unfilled: "─",
+            length: 50,
+            stop1: AnsiRGB { r: 255, g: 0, b: 0 },
+            stop2: AnsiRGB {
+                r: 255,
+                g: 255,
+                b: 0,
+            },
+            stop3: AnsiRGB {
+                r: 50,
+                g: 255,
+                b: 0,
+            },
+        }
+    }
     pub fn increse_n(&mut self) {
         self.n += 1;
     }
@@ -360,11 +382,11 @@ fn parse(string: &String, commands: &[String], parse_invalid: bool) -> Vec<Token
         if [' ', '\t'].contains(&character) {
             if !buffer.is_empty() {
                 if commands.contains(&buffer) && is_first_command && no_text_token {
-                    if parse_invalid {
-                        tokens.push(Token::InvalidCommand(buffer.clone()))
+                    tokens.push(if parse_invalid {
+                        Token::InvalidCommand(buffer.clone())
                     } else {
-                        tokens.push(Token::Command(buffer.clone()));
-                    }
+                        Token::Command(buffer.clone())
+                    });
                     buffer.clear();
                     is_first_command = false;
                 } else {
@@ -421,18 +443,18 @@ pub fn input(
                 if buffer.is_empty() && !default.is_empty() {
                     return default;
                 }
-                if is_blacklist && !allow_blacklist {
-                    if !parse(&buffer, commands, true)
+                if is_blacklist
+                    && !allow_blacklist
+                    && !parse(&buffer, commands, true)
                         .iter()
-                        .filter(|e| match e {
+                        .filter(|t| match t {
                             Token::InvalidCommand(_) => true,
                             _ => false,
                         })
                         .collect::<Vec<&Token>>()
                         .is_empty()
-                    {
-                        continue;
-                    }
+                {
+                    continue;
                 }
                 println!();
                 return buffer;
@@ -507,16 +529,19 @@ pub fn getcwd() -> String {
 }
 
 pub fn getcwd_short() -> String {
+    let current_directory: String = getcwd();
     let home_dir = std::env::vars().find(|key_value| key_value.0 == "HOME".to_string());
-    if home_dir.is_some() {
-        let home_dir = home_dir.unwrap().1;
-        if getcwd().len() >= home_dir.len() {
-            if getcwd()[..home_dir.len()] == home_dir {
-                return getcwd().replacen(&home_dir, "~", 1);
-            }
-        }
+    if home_dir.is_none() {
+        return current_directory;
     }
-    getcwd()
+    let home_dir = home_dir.unwrap().1;
+    if current_directory.len() >= home_dir.len() {
+        return current_directory;
+    }
+    if current_directory[..home_dir.len()] != home_dir {
+        return current_directory;
+    }
+    return current_directory.replacen(&home_dir, "~", 1);
 }
 
 fn check_master_password(directory_name: &str, input: &str) -> bool {
@@ -557,15 +582,13 @@ fn process_command(command: &str) {
 /// Changes current working directory
 pub fn cd(directory_name: &str) {
     let is_absolute_path = directory_name[0..1] == *"/";
-    if !is_absolute_path {
-        let res = std::env::set_current_dir(format!("{}/{}", getcwd(), directory_name).trim());
-        if res.is_err() {
-            let res = res.unwrap_err();
-            eprintln!("{res}")
-        }
-        return;
+    let future_cwd: String;
+    if is_absolute_path {
+        future_cwd = directory_name.to_string()
+    } else {
+        future_cwd = format!("{}/{}", getcwd(), directory_name)
     }
-    let res = std::env::set_current_dir(directory_name);
+    let res = std::env::set_current_dir(future_cwd);
     if res.is_err() {
         let res = res.unwrap_err();
         eprintln!("{res}")
@@ -605,7 +628,7 @@ pub fn directory_selector() -> (String, SecretString, bool) {
                 .to_str()
                 .unwrap()
                 .to_string();
-            if !crate::storage::verify_directory(&directory_name) {
+            if !verify_directory(&directory_name) {
                 println!(
                     "Either the directory provided doesn't exist or it doesn't have the correct files and folders"
                 );
