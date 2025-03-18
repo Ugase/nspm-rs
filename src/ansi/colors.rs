@@ -21,72 +21,6 @@ pub const BRIGHT_CYAN: &str = "\x1b[96m";
 pub const BRIGHT_WHITE: &str = "\x1b[97m";
 
 pub const BOLD: &str = "\x1b[1m";
-//pub enum CBit {
-//    BLACK,
-//    GREEN,
-//    WHITE,
-//    BLUE,
-//    CYAN,
-//    YELLOW,
-//    RED,
-//    MAGENTA,
-//}
-//
-//pub enum CBitBright {
-//    BLACK,
-//    GREEN,
-//    WHITE,
-//    BLUE,
-//    CYAN,
-//    YELLOW,
-//    RED,
-//    MAGENTA,
-//}
-
-//impl CBit {
-//    fn ansi(&self) -> String {
-//        match self {
-//            CBit::BLACK => BLACK.to_string(),
-//            CBit::RED => RED.to_string(),
-//            CBit::GREEN => GREEN.to_string(),
-//            CBit::YELLOW => YELLOW.to_string(),
-//            CBit::BLUE => BLUE.to_string(),
-//            CBit::MAGENTA => MAGENTA.to_string(),
-//            CBit::CYAN => CYAN.to_string(),
-//            CBit::WHITE => WHITE.to_string(),
-//        }
-//    }
-//}
-//
-//impl CBitBright {
-//    fn ansi(&self) -> String {
-//        match self {
-//            CBitBright::BLACK => BRIGHT_BLACK.to_string(),
-//            CBitBright::RED => BRIGHT_RED.to_string(),
-//            CBitBright::GREEN => BRIGHT_GREEN.to_string(),
-//            CBitBright::YELLOW => BRIGHT_YELLOW.to_string(),
-//            CBitBright::BLUE => BRIGHT_BLUE.to_string(),
-//            CBitBright::MAGENTA => BRIGHT_MAGENTA.to_string(),
-//            CBitBright::CYAN => BRIGHT_CYAN.to_string(),
-//            CBitBright::WHITE => BRIGHT_WHITE.to_string(),
-//        }
-//    }
-//}
-//
-//pub enum Bit {
-//    Cbit(CBit),
-//    Bright(CBitBright),
-//}
-//
-//pub enum Color {
-//    RGB(AnsiRGB),
-//    Bit(Bit),
-//}
-//
-//pub struct ColoredText {
-//    color: Color,
-//    text: String,
-//}
 
 #[derive(Debug, Clone, Copy)]
 pub struct AnsiRGB {
@@ -131,15 +65,3 @@ impl Display for AnsiRGB {
         write!(f, "{ESC}38;2;{};{};{}m", self.r, self.g, self.b)
     }
 }
-
-//impl Display for ColoredText {
-//    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//        match &self.color {
-//            Color::RGB(rgb) => write!(f, "{rgb}{}{RESET}", self.text),
-//            Color::Bit(bit) => match bit {
-//                Bit::Cbit(cbit) => write!(f, "{}{}{RESET}", cbit.ansi(), self.text),
-//                Bit::Bright(cbitbright) => write!(f, "{}{}{RESET}", cbitbright.ansi(), self.text),
-//            },
-//        }
-//    }
-//}
