@@ -1,9 +1,7 @@
 use crate::{
-    ansi::colors::{AnsiRGB, BLUE, BOLD, GREEN, RED, RESET, YELLOW},
-    ansi::{CLEAR, Csi, EL},
-    con::*,
+    ansi::{CLEAR, Csi, EL, colors::*},
     cryptography::check_hash,
-    storage::{get_master_password, verify_directory},
+    storage::{get_master_password, initialize_directory, verify_directory},
 };
 use getch_rs::{Getch, Key};
 use rand::{Rng, SeedableRng, rngs::StdRng};
@@ -14,13 +12,10 @@ use std::{
     fmt::Display,
     fs,
     io::{self, Write},
-    ops::{Add, Sub},
 };
-
 const V: &str = "✔";
 const W: &str = "⚠︎";
 const HELP_MESSAGE: &str = "There are a total of 7 commands (which have alaises):\n\nchoose (no other alias): Chooses a directory. Only accepts directories with the correct files\ncd (no other alias): Changes current working directory\nls (no other alias): Lists the contents of the current working directory\nexit (q, quit, ex): Exits the program\nclear (c, cls): clears the screen\nnew (init, new_session, make): clears the screen and prompts the user for the new directories name and the master password to store the hash in the master_password file\nhelp (h, ?): Shows this help\n\nUsage:\n\nCommands with no arguments: ls, exit, clear, help, new\n\ncd: cd {dirname}\nchoose: choose {dirname}";
-
 pub const YESES: [&str; 15] = [
     "y",
     "yes",
@@ -38,7 +33,6 @@ pub const YESES: [&str; 15] = [
     "s",
     "se",
 ];
-
 const CHARS: [&str; 94] = [
     "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s",
     "t", "u", "v", "w", "x", "y", "z", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L",
@@ -54,6 +48,11 @@ pub const ALL_FLAGS: [InputFlags; 4] = [
 ];
 pub const NO_FLAGS: &[InputFlags; 0] = &[];
 pub const NO_COMMANDS: &[String; 0] = &[];
+const COMMANDS: [&str; 7] = ["choose", "cd", "ls", "exit", "clear", "new", "help"];
+const EXIT_ALIASES: [&str; 3] = ["q", "quit", "ex"];
+const NEW_ALIASES: [&str; 3] = ["new", "new_session", "make"];
+const CLEAR_ALIASES: [&str; 2] = ["c", "cls"];
+const HELP_ALIASES: [&str; 2] = ["h", "?"];
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum Token {
     InvalidCommand(String),
@@ -81,22 +80,107 @@ impl Display for Token {
     }
 }
 
+pub struct MenuConfig {
+    pub prompt: String,
+    pub icon: String,
+}
+
+struct VecIndex<T> {
+    vector: Vec<T>,
+    index: usize,
+}
+
+impl<T> VecIndex<T> {
+    fn new(vector: Vec<T>) -> Self {
+        Self { vector, index: 0 }
+    }
+    fn next(&mut self) {
+        if self.index + 1 >= self.vector.len() {
+            self.index = 0;
+        } else {
+            self.index += 1
+        }
+    }
+    fn prev(&mut self) {
+        if self.index == 0 {
+            self.index = self.vector.len() - 1
+        } else {
+            self.index -= 1
+        }
+    }
+}
+
+impl Default for MenuConfig {
+    fn default() -> Self {
+        Self {
+            prompt: "nspm v1.0.0".to_string(),
+            icon: ">".to_string(),
+        }
+    }
+}
+
+// this is ugly
+fn all_commands() -> Vec<String> {
+    let mut command: Vec<String> = COMMANDS.iter().map(|s| s.to_owned().to_owned()).collect();
+    command.append(
+        &mut EXIT_ALIASES
+            .iter()
+            .map(|s| s.to_owned().to_owned())
+            .collect(),
+    );
+    command.append(
+        &mut CLEAR_ALIASES
+            .iter()
+            .map(|s| s.to_owned().to_owned())
+            .collect::<Vec<String>>(),
+    );
+    command.append(
+        &mut NEW_ALIASES
+            .iter()
+            .map(|s| s.to_owned().to_owned())
+            .collect::<Vec<String>>(),
+    );
+    command.append(
+        &mut HELP_ALIASES
+            .iter()
+            .map(|s| s.to_owned().to_owned())
+            .collect::<Vec<String>>(),
+    );
+    command
+}
+
+fn process_alias(alias: &str) -> &str {
+    let alias = alias.trim();
+    if COMMANDS.contains(&alias) {
+        return alias;
+    } else if EXIT_ALIASES.contains(&alias) {
+        return "exit";
+    } else if CLEAR_ALIASES.contains(&alias) {
+        return "clear";
+    } else if NEW_ALIASES.contains(&alias) {
+        return "new";
+    } else if HELP_ALIASES.contains(&alias) {
+        return "help";
+    }
+    ""
+}
+
+fn directory_selector_prompt() -> String {
+    let current_directory = getcwd_short();
+    format!("{BLUE}{current_directory}{RESET} {MAGENTA}❯ {RESET}")
+}
+
+/// A way simpler [Select](<https://docs.rs/dialoguer/latest/dialoguer/struct.Select.html>)
 pub struct Menu {
-    options: Vec<String>,
-    selection: LimitedUint,
+    selection: VecIndex<String>,
     prompt: String,
     icon: String,
 }
 
 impl Menu {
     pub fn new(menu_config: MenuConfig, options: Vec<String>) -> Self {
-        let selection = LimitedUint {
-            value: 0,
-            minimum: 0,
-            maximum: options.len() - 1,
-        };
+        let selection = VecIndex::new(options);
         Self {
-            options,
             selection,
             prompt: menu_config.prompt,
             icon: menu_config.icon,
@@ -104,6 +188,7 @@ impl Menu {
     }
 
     pub fn interact(&mut self) -> usize {
+        println!("{}", Csi::Hide);
         println!("{CLEAR}");
         let getch = Getch::new();
         println!("{}", self.prompt);
@@ -112,25 +197,16 @@ impl Menu {
             let chr = getch.getch();
             match chr {
                 Ok(Key::Char('\r')) => {
+                    println!("{}", Csi::Show);
                     println!("{CLEAR}");
-                    return self.selection.value;
+                    return self.selection.index;
                 }
                 Ok(Key::Char('j')) | Ok(Key::Down) | Ok(Key::Char('l')) => {
-                    self.selection = self.selection
-                        + LimitedUint {
-                            value: 1,
-                            minimum: 0,
-                            maximum: 2,
-                        }
+                    self.selection.next();
                 }
                 Ok(Key::Up) | Ok(Key::Char('k')) | Ok(Key::Backspace) | Ok(Key::Delete)
                 | Ok(Key::Char('h')) => {
-                    self.selection = self.selection
-                        - LimitedUint {
-                            value: 1,
-                            minimum: 0,
-                            maximum: 2,
-                        }
+                    self.selection.prev();
                 }
                 Ok(Key::Ctrl('c')) => std::process::exit(1),
                 Ok(_key) => {}
@@ -143,31 +219,36 @@ impl Menu {
     }
     fn print_items(&self) {
         let space = " ".repeat(self.icon.chars().count() + 1);
-        for index in 0..self.options.len() {
-            if index == self.selection.value {
-                println!("{} {}", self.icon, *self.options.get(index).unwrap());
+        for index in 0..self.selection.vector.len() {
+            if index == self.selection.index {
+                println!(
+                    "{} {}",
+                    self.icon,
+                    *self.selection.vector.get(index).unwrap()
+                );
                 continue;
             }
-            println!("{}{}", space, *self.options.get(index).unwrap())
+            println!("{}{}", space, *self.selection.vector.get(index).unwrap())
         }
     }
 }
 
 #[derive(Debug)]
 pub struct ProgressBar<'a> {
-    pub n: u32,
-    pub d: u32,
-    pub left: char,
-    pub right: char,
-    pub filled: &'a str,
-    pub unfilled: &'a str,
-    pub stop1: AnsiRGB,
-    pub stop2: AnsiRGB,
-    pub stop3: AnsiRGB,
-    pub length: u32,
+    n: u32,
+    d: u32,
+    left: char,
+    right: char,
+    filled: &'a str,
+    unfilled: &'a str,
+    stop1: AnsiRGB,
+    stop2: AnsiRGB,
+    stop3: AnsiRGB,
+    length: u32,
 }
 
 impl ProgressBar<'_> {
+    /// Creates a new progress bar
     pub fn new(d: u32) -> Self {
         Self {
             n: 0,
@@ -190,7 +271,7 @@ impl ProgressBar<'_> {
             },
         }
     }
-    pub fn increse_n(&mut self) {
+    pub fn increase_n(&mut self) {
         self.n += 1;
     }
 }
@@ -217,65 +298,11 @@ impl Display for ProgressBar<'_> {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
-struct LimitedUint {
-    value: usize,
-    minimum: usize,
-    maximum: usize,
-}
-
-impl Add for LimitedUint {
-    type Output = LimitedUint;
-    fn add(self, rhs: Self) -> Self::Output {
-        let res = LimitedUint {
-            value: self.value + rhs.value,
-            minimum: self.minimum,
-            maximum: self.maximum,
-        };
-        if res.value <= self.maximum {
-            res
-        } else {
-            LimitedUint {
-                value: self.minimum,
-                minimum: self.minimum,
-                maximum: self.maximum,
-            }
-        }
-    }
-}
-
-impl Sub for LimitedUint {
-    type Output = LimitedUint;
-    fn sub(self, rhs: Self) -> Self::Output {
-        if rhs.value > self.value {
-            return LimitedUint {
-                value: self.maximum,
-                minimum: self.minimum,
-                maximum: self.maximum,
-            };
-        }
-        let res = LimitedUint {
-            value: self.value - rhs.value,
-            minimum: self.minimum,
-            maximum: self.maximum,
-        };
-        if res.value >= self.minimum {
-            res
-        } else {
-            LimitedUint {
-                value: self.maximum,
-                minimum: self.minimum,
-                maximum: self.maximum,
-            }
-        }
-    }
-}
-
 fn evaluate_password(password: &str) {
     let (length, upper, digits, lower, unique) = (
         password.chars().count(),
         password.chars().filter(|s| s.is_uppercase()).count(),
-        password.chars().filter(|s| s.is_ascii_digit()).count(),
+        password.chars().filter(|s| s.is_numeric()).count(),
         password.chars().filter(|s| s.is_lowercase()).count(),
         password.chars().collect::<HashSet<char>>().len(),
     );
@@ -361,7 +388,7 @@ pub fn password_input(prompt: impl Display) -> SecretString {
 fn list_directory(path: &str) {
     for p in fs::read_dir(path).unwrap() {
         let path = p.unwrap().path();
-        let path_str = path.as_path().file_name().unwrap().to_str().unwrap();
+        let path_str = path.file_name().unwrap().to_str().unwrap();
         if path.is_dir() {
             println!("{BLUE}{BOLD}{path_str}{RESET}");
             continue;
@@ -462,22 +489,14 @@ pub fn input(
             Ok(Key::Char(c)) => {
                 buffer.push(c);
             }
-            Ok(Key::Backspace) => {
-                buffer.pop();
-            }
-            Ok(Key::Delete) => {
+            Ok(Key::Backspace) | Ok(Key::Delete) => {
                 buffer.pop();
             }
             Ok(Key::Ctrl('c')) | Ok(Key::Ctrl('z')) => std::process::exit(1),
             Ok(_key) => {}
             Err(e) => eprintln!("{e}"),
         }
-        print!(
-            "{}{}{}",
-            Csi::CPL.ansi(),
-            Csi::CNL.ansi(),
-            Csi::El(EL::EL2).ansi()
-        );
+        print!("{}{}{}", Csi::CPL, Csi::CNL, Csi::El(EL::EL2));
         let _ = stdout.flush();
         if highlight_text {
             print!(
@@ -513,21 +532,24 @@ fn new_directory() -> (String, SecretString, bool) {
             ],
         );
         let master_password = new_password_input("Master password: ");
-        crate::storage::initialize_directory(&directory_name, master_password.expose_secret());
+        initialize_directory(&directory_name, master_password.expose_secret());
         println!();
         return (directory_name, master_password, true);
     }
 }
 
+/// Gets current working directory
+///
+/// Panics if current working directory has invalid UTF-8
 pub fn getcwd() -> String {
     std::env::current_dir()
         .unwrap()
-        .as_path()
         .to_str()
         .unwrap()
         .to_string()
 }
 
+/// Shortens home as ~ in the current working directory path
 pub fn getcwd_short() -> String {
     let current_directory: String = getcwd();
     let home_dir = std::env::vars().find(|key_value| key_value.0 == "HOME".to_string());
@@ -535,13 +557,13 @@ pub fn getcwd_short() -> String {
         return current_directory;
     }
     let home_dir = home_dir.unwrap().1;
-    if current_directory.len() >= home_dir.len() {
+    if current_directory.len() < home_dir.len() {
         return current_directory;
     }
     if current_directory[..home_dir.len()] != home_dir {
         return current_directory;
     }
-    return current_directory.replacen(&home_dir, "~", 1);
+    current_directory.replacen(&home_dir, "~", 1)
 }
 
 fn check_master_password(directory_name: &str, input: &str) -> bool {
@@ -579,22 +601,6 @@ fn process_command(command: &str) {
     }
 }
 
-/// Changes current working directory
-pub fn cd(directory_name: &str) {
-    let is_absolute_path = directory_name[0..1] == *"/";
-    let future_cwd: String;
-    if is_absolute_path {
-        future_cwd = directory_name.to_string()
-    } else {
-        future_cwd = format!("{}/{}", getcwd(), directory_name)
-    }
-    let res = std::env::set_current_dir(future_cwd);
-    if res.is_err() {
-        let res = res.unwrap_err();
-        eprintln!("{res}")
-    }
-}
-
 /// Gives a prompt to the user to choose a directory
 pub fn directory_selector() -> (String, SecretString, bool) {
     let commands = all_commands();
@@ -611,7 +617,7 @@ pub fn directory_selector() -> (String, SecretString, bool) {
         } else if sp.len() == 1 {
             let command = process_alias(sp[0]);
             if ["cd", "choose"].contains(&command) {
-                continue;
+                eprintln!("{RED}{BOLD}This command needs 2 arguments{RESET}");
             }
             if command == "new" {
                 return new_directory();
@@ -621,7 +627,10 @@ pub fn directory_selector() -> (String, SecretString, bool) {
         }
         let (command, command_input): (&str, &str) = (process_alias(sp[0]), &sp[1..].join(" "));
         if command == "cd" {
-            cd(command_input);
+            let cd_result = std::env::set_current_dir(command_input);
+            if cd_result.is_err() {
+                eprintln!("{}", cd_result.unwrap_err())
+            }
         } else if command == "choose" {
             let directory_name: String = Path::new(&getcwd())
                 .join(command_input)
@@ -630,7 +639,7 @@ pub fn directory_selector() -> (String, SecretString, bool) {
                 .to_string();
             if !verify_directory(&directory_name) {
                 println!(
-                    "Either the directory provided doesn't exist or it doesn't have the correct files and folders"
+                    "Either the directory provided doesn't exist or it doesn't have the correct files and directories"
                 );
                 continue;
             }
@@ -642,6 +651,7 @@ pub fn directory_selector() -> (String, SecretString, bool) {
     }
 }
 
+/// "Press any key to continue..." recreation
 pub fn pause() {
     let getch = Getch::new();
     let mut buf = io::stdout();
@@ -666,13 +676,13 @@ pub fn generate_password(length: u32) -> String {
 }
 
 /// Prompts the user for a number
-pub fn prompt_number(prompt: &str, default: String) -> i32 {
+pub fn prompt_number(prompt: &str, default: String) -> u32 {
     loop {
         let number = input(prompt, default.clone(), NO_COMMANDS, NO_FLAGS);
         if !number.bytes().all(|b| b.is_ascii_digit()) {
             continue;
         }
-        let number: i32 = number.parse().unwrap();
+        let number: u32 = number.parse().unwrap();
         return number;
     }
 }

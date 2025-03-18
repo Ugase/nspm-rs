@@ -1,3 +1,5 @@
+use std::fmt::Display;
+use std::io::{Write, stdout};
 pub mod colors;
 
 pub const ESC: &str = "\x1b[";
@@ -5,6 +7,12 @@ pub const CLEAR: &str = "\x1b[H\x1b[2J\x1b[3J";
 #[inline(always)]
 fn ansi(seq: &str) -> String {
     ESC.to_owned() + seq
+}
+
+pub fn clear_line() {
+    let mut buf = stdout();
+    print!("{}{}{}", Csi::CPL, Csi::CNL, Csi::El(EL::EL2));
+    let _ = buf.flush();
 }
 
 pub enum EL {
@@ -17,18 +25,22 @@ pub enum Csi {
     CNL,
     CPL,
     El(EL),
+    Hide,
+    Show,
 }
 
-impl Csi {
-    pub fn ansi(self) -> String {
+impl Display for Csi {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Csi::CPL => ansi("F"),
-            Csi::CNL => ansi("E"),
+            Csi::CPL => write!(f, "{}", ansi("F")),
+            Csi::CNL => write!(f, "{}", ansi("E")),
             Csi::El(e) => match e {
                 //EL::EL0 => return ansi("K"),
                 //EL::EL1 => return ansi("1K"),
-                EL::EL2 => return ansi("2K"),
+                EL::EL2 => return write!(f, "{}", ansi("2K")),
             },
+            Csi::Hide => return write!(f, "{}", ansi("?25l")),
+            Csi::Show => return write!(f, "{}", ansi("?25h")),
         }
     }
 }

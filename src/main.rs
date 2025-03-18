@@ -1,15 +1,18 @@
 //! The documentation in this program is not really good
 //! so don't set your expectations too high
 
-mod ansi;
-mod con;
-mod cryptography;
-mod storage;
-mod ui;
+pub mod ansi;
+pub mod cryptography;
+pub mod storage;
+pub mod ui;
 
-use con::*;
+use secrecy::SecretString;
+use std::process::exit;
 use storage::PasswordArray;
-use ui::*;
+use ui::{
+    ALL_FLAGS, InputFlags, Menu, MenuConfig, NO_COMMANDS, NO_FLAGS, YESES, directory_selector,
+    generate_password, input, new_password_input, pause, prompt_number,
+};
 
 fn main() {
     let mut menu = Menu::new(
@@ -24,14 +27,10 @@ fn main() {
         ],
     );
     let (directory, master_password, is_new) = directory_selector();
-    if is_new {
-        let mut password_array = PasswordArray::new(master_password, directory);
-        loop {
-            run(menu.interact(), &mut password_array);
-        }
+    let mut password_array = PasswordArray::new(master_password, directory);
+    if !is_new {
+        password_array.load(true).unwrap();
     }
-    let mut password_array = PasswordArray::new(master_password, String::new());
-    password_array.load(&directory, true).unwrap();
     loop {
         run(menu.interact(), &mut password_array);
     }
@@ -106,16 +105,21 @@ fn run(index: usize, password_array: &mut PasswordArray) {
                     &password_array.get_services(),
                     &ALL_FLAGS,
                 );
-                let res = password_array
-                    .add_password(service, secrecy::SecretString::from(generated_password));
+                let res =
+                    password_array.add_password(service, SecretString::from(generated_password));
                 if res.is_err() {
                     println!("{}", res.unwrap_err())
                 }
             }
         }
         5 => {
-            password_array.save(true);
-            std::process::exit(0)
+            let result = password_array.save(true);
+            if result.is_err() {
+                let result = result.unwrap_err();
+                eprintln!("\n{result}");
+                exit(1)
+            }
+            exit(0)
         }
         _ => {}
     }

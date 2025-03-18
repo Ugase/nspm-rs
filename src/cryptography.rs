@@ -15,8 +15,8 @@ const P_COST: u32 = 1;
 
 const KEY_LENGTH: usize = 32;
 const MEMORY_COST_KEY: u32 = 2_u32.pow(16);
-const T_COST_KEY: u32 = 2;
-const P_COST_KEY: u32 = 3;
+const T_COST_KEY: u32 = 3;
+const P_COST_KEY: u32 = 1;
 
 const SALT_LENGTH: usize = 32;
 

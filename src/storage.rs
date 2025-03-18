@@ -1,5 +1,5 @@
 use crate::{
-    ansi::{Csi, EL},
+    ansi::clear_line,
     cryptography::{decrypt, encrypt, generate_salt, hash},
     ui::ProgressBar,
 };
@@ -7,7 +7,12 @@ use argon2::password_hash::SaltString;
 use comfy_table::{ContentArrangement, Table};
 use rand_core::OsRng;
 use secrecy::{ExposeSecret, SecretString};
-use std::{fs, io::Write, iter::zip, time::Duration};
+use std::{
+    fs,
+    io::{Write, stdout},
+    iter::zip,
+    time::Duration,
+};
 
 /// A password with service and salt metadata
 #[derive(Debug, Clone)]
@@ -26,8 +31,14 @@ pub struct PasswordArray {
     directory_name: String,
 }
 
+pub fn simpler_print(data: String) {
+    let mut buf = stdout();
+    print!("{data}");
+    let _ = buf.flush();
+}
+
 impl PasswordArray {
-    /// Makes a new empty [`PasswordArray`] with master_password
+    /// Makes a new empty [`PasswordArray`] with master_password and directory_name
     pub fn new(master_password: SecretString, directory_name: String) -> PasswordArray {
         PasswordArray {
             passwords: vec![],
@@ -36,76 +47,81 @@ impl PasswordArray {
         }
     }
     /// Saves all passwords in a directory that can be loaded with [load][PasswordArray::load]
-    ///
-    /// # Panics
-    /// Panics if directory doesn't exist
-    pub fn save(&mut self, print_state: bool) {
-        let mut progress = ProgressBar::new(self.passwords.len() as u32 * 3);
-        let _ = fs::remove_dir_all(&self.directory_name);
-        initialize_directory(&self.directory_name, self.master_password.expose_secret());
-        self.encrypt(print_state, &mut progress);
+    pub fn save(&mut self, print_progress_bar: bool) -> Result<(), String> {
+        let mut progress_bar = ProgressBar::new((self.passwords.len() as u32 * 3) + 4);
+        let temporary_directory: String = format!("{}_tmp", self.directory_name);
+        if print_progress_bar {
+            progress_bar.increase_n();
+            clear_line();
+            simpler_print(format!("{progress_bar} Making temporary directory"));
+        }
+        initialize_directory(&temporary_directory, self.master_password.expose_secret());
+        if print_progress_bar {
+            progress_bar.increase_n();
+            clear_line();
+            simpler_print(format!("{progress_bar} Made temporary directory"));
+        }
+        self.encrypt(print_progress_bar, &mut progress_bar);
         for (index, password) in self.passwords.iter().enumerate() {
-            let password_location = format!("{}/passwords/password_{index}", self.directory_name);
-            let service_location = format!("{}/services/service_{index}", self.directory_name);
-            let salt_location = format!("{}/salts/salt_{index}", self.directory_name);
-            if print_state {
-                let mut buf = std::io::stdout();
-                progress.increse_n();
-                print!(
-                    "{}{}{}",
-                    Csi::CPL.ansi(),
-                    Csi::CNL.ansi(),
-                    Csi::El(EL::EL2).ansi()
-                );
-                let _ = buf.flush();
-                print!("{} Saving, {}", progress, password.service);
-                let _ = buf.flush();
+            let password_location = format!("{temporary_directory}/passwords/password_{index}");
+            let service_location = format!("{temporary_directory}/services/service_{index}");
+            let salt_location = format!("{temporary_directory}/salts/salt_{index}");
+            if print_progress_bar {
+                progress_bar.increase_n();
+                clear_line();
+                simpler_print(format!("{progress_bar} Saving, {}", password.service));
                 sleep(45);
             }
-            password.save(&password_location, &salt_location, &service_location);
+            password.save(&password_location, &salt_location, &service_location)?;
+        }
+        if print_progress_bar {
+            progress_bar.increase_n();
+            clear_line();
+            simpler_print(format!("{progress_bar} Moving temporary directory"));
+        }
+        fs::remove_dir_all(&self.directory_name)
+            .map_err(|err| format!("Error when moving directory: {err}"))?;
+        fs::rename(&temporary_directory, &self.directory_name)
+            .map_err(|err| format!("Error when moving directory: {err}"))?;
+        if print_progress_bar {
+            progress_bar.increase_n();
+            clear_line();
+            simpler_print(format!("{progress_bar} Moved temporary directory"));
         }
         println!();
+        Ok(())
     }
     /// Loads a directory to a [PasswordArray]
-    ///
-    /// # Panics
-    /// Panics when a file or directory doesn't exist or master password is wrong
-    pub fn load(&mut self, directory_name: &str, print_state: bool) -> Result<(), &str> {
+    pub fn load(&mut self, print_progress_bar: bool) -> Result<(), String> {
         if !self.passwords.is_empty() {
-            return Err("self.passwords not empty");
+            return Err(String::from("self.passwords not empty"));
+        } else if !verify_directory(&self.directory_name) {
+            return Err(String::from(
+                "directory either doesn't exist or doesn't have the correct files and directories",
+            ));
         }
-        let amount_of_passwords: usize = fs::read_dir(format!("{directory_name}/passwords"))
+        let amount_of_passwords: usize = fs::read_dir(format!("{}/passwords", self.directory_name))
             .unwrap()
             .count();
-        let mut progress = ProgressBar::new(amount_of_passwords as u32 * 3);
-        self.directory_name = directory_name.to_string();
+        let mut progress_bar = ProgressBar::new(amount_of_passwords as u32 * 3);
         for index in 0..amount_of_passwords {
             self.passwords.push(Password::load(
-                format!("{directory_name}/passwords/password_{index}").as_str(),
-                format!("{directory_name}/salts/salt_{index}").as_str(),
-                format!("{directory_name}/services/service_{index}").as_str(),
+                format!("{}/passwords/password_{index}", self.directory_name).as_str(),
+                format!("{}/salts/salt_{index}", self.directory_name).as_str(),
+                format!("{}/services/service_{index}", self.directory_name).as_str(),
                 self.master_password.expose_secret(),
-            ));
-            if print_state {
-                let mut buf = std::io::stdout();
-                print!(
-                    "{}{}{}",
-                    Csi::CPL.ansi(),
-                    Csi::CNL.ansi(),
-                    Csi::El(EL::EL2).ansi()
-                );
-                let _ = buf.flush();
-                progress.increse_n();
-                print!(
-                    "{} Loaded, {}",
-                    progress,
+            )?);
+            if print_progress_bar {
+                progress_bar.increase_n();
+                clear_line();
+                simpler_print(format!(
+                    "{progress_bar} Loaded, {}",
                     self.passwords.get(index).unwrap().service
-                );
-                let _ = buf.flush();
+                ));
                 sleep(45);
             }
         }
-        self.decrypt(print_state, &mut progress);
+        self.decrypt(print_progress_bar, &mut progress_bar);
         println!();
         Ok(())
     }
@@ -146,65 +162,33 @@ impl PasswordArray {
         self.passwords.remove(index);
         Ok(())
     }
-    fn decrypt(&mut self, print_state: bool, progress_bar: &mut ProgressBar) {
+    fn decrypt(&mut self, print_progress_bar: bool, progress_bar: &mut ProgressBar) {
         for password in self.passwords.iter_mut() {
-            if print_state {
-                let mut buf = std::io::stdout();
-                print!(
-                    "{}{}{}",
-                    Csi::CPL.ansi(),
-                    Csi::CNL.ansi(),
-                    Csi::El(EL::EL2).ansi()
-                );
-                let _ = buf.flush();
-                progress_bar.increse_n();
-                print!("{} Decrypting, {}", progress_bar, password.service);
-                let _ = buf.flush();
+            if print_progress_bar {
+                progress_bar.increase_n();
+                clear_line();
+                simpler_print(format!("{progress_bar} Decrypting, {}", password.service));
             }
             password.decrypt().unwrap();
-            if print_state {
-                let mut buf = std::io::stdout();
-                print!(
-                    "{}{}{}",
-                    Csi::CPL.ansi(),
-                    Csi::CNL.ansi(),
-                    Csi::El(EL::EL2).ansi()
-                );
-                let _ = buf.flush();
-                progress_bar.increse_n();
-                print!("{} Decrypted, {}", progress_bar, password.service);
-                let _ = buf.flush();
+            if print_progress_bar {
+                progress_bar.increase_n();
+                clear_line();
+                simpler_print(format!("{progress_bar} Decrypted, {}", password.service));
             }
         }
     }
-    fn encrypt(&mut self, print_state: bool, progress_bar: &mut ProgressBar) {
+    fn encrypt(&mut self, print_progress_bar: bool, progress_bar: &mut ProgressBar) {
         for password in self.passwords.iter_mut() {
-            if print_state {
-                let mut buf = std::io::stdout();
-                print!(
-                    "{}{}{}",
-                    Csi::CPL.ansi(),
-                    Csi::CNL.ansi(),
-                    Csi::El(EL::EL2).ansi()
-                );
-                let _ = buf.flush();
-                progress_bar.increse_n();
-                print!("{} Encrypting, {}", progress_bar, password.service);
-                let _ = buf.flush();
+            if print_progress_bar {
+                progress_bar.increase_n();
+                clear_line();
+                simpler_print(format!("{progress_bar} Encrypting, {}", password.service));
             }
             password.encrypt().unwrap();
-            if print_state {
-                let mut buf = std::io::stdout();
-                print!(
-                    "{}{}{}",
-                    Csi::CPL.ansi(),
-                    Csi::CNL.ansi(),
-                    Csi::El(EL::EL2).ansi()
-                );
-                let _ = buf.flush();
-                progress_bar.increse_n();
-                print!("{} Encrypted, {}", progress_bar, password.service);
-                let _ = buf.flush();
+            if print_progress_bar {
+                progress_bar.increase_n();
+                clear_line();
+                simpler_print(format!("{progress_bar} Encrypted, {}", password.service));
             }
         }
     }
@@ -241,16 +225,25 @@ impl Password {
         }
     }
     /// saves [Password]'s details to 3 different files
-    pub fn save(&self, password_location: &str, salt_location: &str, service_location: &str) {
+    pub fn save(
+        &self,
+        password_location: &str,
+        salt_location: &str,
+        service_location: &str,
+    ) -> Result<(), String> {
         if !self.is_encrypted {
             panic!("not encrypted");
         }
-        fs::write(password_location, self.password.expose_secret()).unwrap();
-        fs::write(salt_location, self.salt.as_str()).unwrap();
-        fs::write(service_location, &self.service).unwrap();
+        fs::write(password_location, self.password.expose_secret())
+            .map_err(|err| format!("Error when writing password: {err}"))?;
+        fs::write(salt_location, self.salt.as_str())
+            .map_err(|err| format!("Error when writing salt: {err}"))?;
+        fs::write(service_location, &self.service)
+            .map_err(|err| format!("Error when writing service: {err}"))?;
+        Ok(())
     }
     /// Makes encrypted [Password] from the 3 files that [Password::save] writes
-    /// assumes that the password is encrypted
+    /// Assumes that the password is encrypted
     ///
     /// # Panics
     /// Panics if either one of the file locations doesn't exist or if the salt stored at salt
@@ -260,15 +253,22 @@ impl Password {
         salt_location: &str,
         service_location: &str,
         master_password: &str,
-    ) -> Password {
-        Password {
-            password: SecretString::from(fs::read_to_string(password_location).unwrap()),
-            salt: SaltString::from_b64(&fs::read_to_string(salt_location).unwrap())
-                .expect("salt not in base64"),
-            service: fs::read_to_string(service_location).unwrap(),
+    ) -> Result<Password, String> {
+        Ok(Password {
+            password: SecretString::from(
+                fs::read_to_string(password_location)
+                    .map_err(|err| format!("Failed to read: {password_location}, Error: {err}"))?,
+            ),
+            salt: SaltString::from_b64(
+                &fs::read_to_string(salt_location)
+                    .map_err(|err| format!("Failed to read {salt_location}, Error: {err}"))?,
+            )
+            .map_err(|err| format!("Failed to decode from base64: {err}"))?,
+            service: fs::read_to_string(service_location)
+                .map_err(|err| format!("Failed to read {service_location}: {err}"))?,
             key: SecretString::from(master_password),
             is_encrypted: true,
-        }
+        })
     }
     /// encrypts the password with key (doesn't encrypt when already encrypted)
     /// also throws away the key
