@@ -29,7 +29,11 @@ fn main() {
     let (directory, master_password, is_new) = directory_selector();
     let mut password_array = PasswordArray::new(master_password, directory);
     if !is_new {
-        password_array.load(true).unwrap();
+        let result = password_array.load(true);
+        if result.is_err() {
+            let result = result.unwrap_err();
+            eprintln!("{result}")
+        }
     }
     loop {
         run(menu.interact(), &mut password_array);

@@ -1,7 +1,7 @@
 use crate::{
     ansi::clear_line,
     cryptography::{decrypt, encrypt, generate_salt, hash},
-    ui::ProgressBar,
+    ui::{NO_COMMANDS, NO_FLAGS, ProgressBar, YESES, input},
 };
 use argon2::password_hash::SaltString;
 use comfy_table::{ContentArrangement, Table};
@@ -11,6 +11,7 @@ use std::{
     fs,
     io::{Write, stdout},
     iter::zip,
+    process::exit,
     time::Duration,
 };
 
@@ -48,8 +49,24 @@ impl PasswordArray {
     }
     /// Saves all passwords in a directory that can be loaded with [load][PasswordArray::load]
     pub fn save(&mut self, print_progress_bar: bool) -> Result<(), String> {
-        let mut progress_bar = ProgressBar::new((self.passwords.len() as u32 * 3) + 4);
         let temporary_directory: String = format!("{}_tmp", self.directory_name);
+        let mut progress_bar = ProgressBar::new((self.passwords.len() as u32 * 3) + 4);
+        if fs::exists(&temporary_directory).map_err(|err| {
+            format!("Error when checking if temporary directory already exists: {err}")
+        })? {
+            let yn = input(
+                "Temporary directory already exists remove it (Y/n)? ",
+                "y".to_string(),
+                NO_COMMANDS,
+                NO_FLAGS,
+            );
+            if !YESES.contains(&&yn.to_lowercase()[..]) {
+                exit(0)
+            }
+            fs::remove_dir_all(&temporary_directory).map_err(|err| {
+                format!("Error when removing existing temporary directory: {err}")
+            })?;
+        }
         if print_progress_bar {
             progress_bar.increase_n();
             clear_line();
@@ -121,7 +138,7 @@ impl PasswordArray {
                 sleep(45);
             }
         }
-        self.decrypt(print_progress_bar, &mut progress_bar);
+        self.decrypt(print_progress_bar, &mut progress_bar)?;
         println!();
         Ok(())
     }
@@ -162,20 +179,25 @@ impl PasswordArray {
         self.passwords.remove(index);
         Ok(())
     }
-    fn decrypt(&mut self, print_progress_bar: bool, progress_bar: &mut ProgressBar) {
+    fn decrypt(
+        &mut self,
+        print_progress_bar: bool,
+        progress_bar: &mut ProgressBar,
+    ) -> Result<(), String> {
         for password in self.passwords.iter_mut() {
             if print_progress_bar {
                 progress_bar.increase_n();
                 clear_line();
                 simpler_print(format!("{progress_bar} Decrypting, {}", password.service));
             }
-            password.decrypt().unwrap();
+            password.decrypt()?;
             if print_progress_bar {
                 progress_bar.increase_n();
                 clear_line();
                 simpler_print(format!("{progress_bar} Decrypted, {}", password.service));
             }
         }
+        Ok(())
     }
     fn encrypt(&mut self, print_progress_bar: bool, progress_bar: &mut ProgressBar) {
         for password in self.passwords.iter_mut() {

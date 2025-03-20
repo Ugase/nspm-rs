@@ -218,17 +218,17 @@ impl Menu {
         }
     }
     fn print_items(&self) {
-        let space = " ".repeat(self.icon.chars().count() + 1);
+        let space = " ".repeat(self.icon.len() + 1);
         for index in 0..self.selection.vector.len() {
             if index == self.selection.index {
                 println!(
                     "{} {}",
                     self.icon,
-                    *self.selection.vector.get(index).unwrap()
+                    self.selection.vector.get(index).unwrap()
                 );
                 continue;
             }
-            println!("{}{}", space, *self.selection.vector.get(index).unwrap())
+            println!("{}{}", space, self.selection.vector.get(index).unwrap())
         }
     }
 }
@@ -244,7 +244,7 @@ pub struct ProgressBar<'a> {
     stop1: AnsiRGB,
     stop2: AnsiRGB,
     stop3: AnsiRGB,
-    length: u32,
+    length: usize,
 }
 
 impl ProgressBar<'_> {
@@ -280,21 +280,18 @@ impl Display for ProgressBar<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let percent: f64 = self.n as f64 / (self.d as f64 / self.length as f64);
         let usp: usize = percent as usize;
-        let uthr: u32 = percent as u32;
-        write!(
-            f,
-            "{0}{2}{3}{RESET}{4}{1}",
+        let (left, right, gradient_color, filled, unfilled) = (
             self.left,
             self.right,
             self.stop1.gradient(
                 (self.n as f64 * 100.0) / self.d as f64,
                 self.stop2,
-                self.stop3
+                self.stop3,
             ),
             self.filled.repeat(usp),
-            self.unfilled
-                .repeat((self.length - uthr).try_into().unwrap()),
-        )
+            self.unfilled.repeat(self.length - usp),
+        );
+        write!(f, "{left}{gradient_color}{filled}{RESET}{unfilled}{right}",)
     }
 }
 
@@ -618,6 +615,7 @@ pub fn directory_selector() -> (String, SecretString, bool) {
             let command = process_alias(sp[0]);
             if ["cd", "choose"].contains(&command) {
                 eprintln!("{RED}{BOLD}This command needs 2 arguments{RESET}");
+                continue;
             }
             if command == "new" {
                 return new_directory();
