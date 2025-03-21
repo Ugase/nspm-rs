@@ -97,7 +97,7 @@ impl PasswordArray {
             simpler_print(format!("{progress_bar} Moving temporary directory"));
         }
         fs::remove_dir_all(&self.directory_name)
-            .map_err(|err| format!("Error when moving directory: {err}"))?;
+            .map_err(|err| format!("Error with removing old directory: {err}"))?;
         fs::rename(&temporary_directory, &self.directory_name)
             .map_err(|err| format!("Error when moving directory: {err}"))?;
         if print_progress_bar {
@@ -371,14 +371,20 @@ pub fn verify_directory(dir_name: &str) -> bool {
             return false;
         }
     }
-    for dir in dirs {
+    for dir in dirs.iter() {
         let meta = fs::metadata(dir);
         if meta.is_err() {
             return false;
-        }
-        if !meta.unwrap().is_dir() {
+        } else if !meta.unwrap().is_dir() {
             return false;
         }
+    }
+    if !(fs::read_dir(dirs[0].clone()).unwrap().count()
+        == fs::read_dir(dirs[1].clone()).unwrap().count()
+        && fs::read_dir(dirs[1].clone()).unwrap().count()
+            == fs::read_dir(dirs[2].clone()).unwrap().count())
+    {
+        return false;
     }
     true
 }
