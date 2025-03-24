@@ -27,12 +27,12 @@ pub struct Password {
 
 impl Password {
     /// creates a new password with a randomly generated salt
-    pub fn new(service_name: String, password: SecretString, master: SecretString) -> Password {
+    pub fn new(service: String, password: SecretString, key: SecretString) -> Password {
         Password {
-            service: service_name,
+            service,
             password,
             salt: generate_salt(&mut OsRng).unwrap(),
-            key: master,
+            key,
             is_encrypted: false,
         }
     }
@@ -162,13 +162,13 @@ impl PasswordArray {
         if print_progress_bar {
             progress_bar.increase_n();
             clear_line();
-            simpler_print(format!("{progress_bar} Making temporary directory"));
+            print_wrapper(format!("{progress_bar} Making temporary directory"));
         }
-        initialize_directory(&temporary_directory, self.master_password.expose_secret());
+        initialize_directory(&temporary_directory, self.master_password.expose_secret())?;
         if print_progress_bar {
             progress_bar.increase_n();
             clear_line();
-            simpler_print(format!("{progress_bar} Made temporary directory"));
+            print_wrapper(format!("{progress_bar} Made temporary directory"));
         }
         self.encrypt(print_progress_bar, &mut progress_bar);
         for (index, password) in self.passwords.iter().enumerate() {
@@ -178,7 +178,7 @@ impl PasswordArray {
             if print_progress_bar {
                 progress_bar.increase_n();
                 clear_line();
-                simpler_print(format!("{progress_bar} Saving, {}", password.service));
+                print_wrapper(format!("{progress_bar} Saving, {}", password.service));
                 sleep(45);
             }
             password.save(&password_location, &salt_location, &service_location)?;
@@ -186,7 +186,7 @@ impl PasswordArray {
         if print_progress_bar {
             progress_bar.increase_n();
             clear_line();
-            simpler_print(format!("{progress_bar} Moving temporary directory"));
+            print_wrapper(format!("{progress_bar} Moving temporary directory"));
         }
         fs::remove_dir_all(&self.directory_name)
             .map_err(|err| format!("Error with removing old directory: {err}"))?;
@@ -195,7 +195,7 @@ impl PasswordArray {
         if print_progress_bar {
             progress_bar.increase_n();
             clear_line();
-            simpler_print(format!("{progress_bar} Moved temporary directory"));
+            print_wrapper(format!("{progress_bar} Moved temporary directory"));
         }
         println!();
         Ok(())
@@ -223,7 +223,7 @@ impl PasswordArray {
             if print_progress_bar {
                 progress_bar.increase_n();
                 clear_line();
-                simpler_print(format!(
+                print_wrapper(format!(
                     "{progress_bar} Loaded, {}",
                     self.passwords.get(index).unwrap().service
                 ));
@@ -280,13 +280,13 @@ impl PasswordArray {
             if print_progress_bar {
                 progress_bar.increase_n();
                 clear_line();
-                simpler_print(format!("{progress_bar} Decrypting, {}", password.service));
+                print_wrapper(format!("{progress_bar} Decrypting, {}", password.service));
             }
             password.decrypt()?;
             if print_progress_bar {
                 progress_bar.increase_n();
                 clear_line();
-                simpler_print(format!("{progress_bar} Decrypted, {}", password.service));
+                print_wrapper(format!("{progress_bar} Decrypted, {}", password.service));
             }
         }
         Ok(())
@@ -296,13 +296,13 @@ impl PasswordArray {
             if print_progress_bar {
                 progress_bar.increase_n();
                 clear_line();
-                simpler_print(format!("{progress_bar} Encrypting, {}", password.service));
+                print_wrapper(format!("{progress_bar} Encrypting, {}", password.service));
             }
             password.encrypt().unwrap();
             if print_progress_bar {
                 progress_bar.increase_n();
                 clear_line();
-                simpler_print(format!("{progress_bar} Encrypted, {}", password.service));
+                print_wrapper(format!("{progress_bar} Encrypted, {}", password.service));
             }
         }
     }
@@ -327,7 +327,7 @@ impl PasswordArray {
     }
 }
 
-pub fn simpler_print(data: String) {
+pub fn print_wrapper(data: String) {
     let mut buf = stdout();
     print!("{data}");
     let _ = buf.flush();
@@ -342,12 +342,16 @@ pub fn get_master_password(dir_name: &str) -> Result<String, std::io::Error> {
 
 /// Initializes the directories and makes the master password
 /// its used to create new directories for the password manager to manage
-pub fn initialize_directory(name: &str, master_password: &str) {
-    fs::create_dir(name).unwrap();
-    fs::create_dir(format!("{name}/passwords")).unwrap();
-    fs::create_dir(format!("{name}/services")).unwrap();
-    fs::create_dir(format!("{name}/salts")).unwrap();
+pub fn initialize_directory(name: &str, master_password: &str) -> Result<(), String> {
+    fs::create_dir(name).map_err(|err| format!("Error when creating directory: {err}"))?;
+    fs::create_dir(format!("{name}/passwords"))
+        .map_err(|err| format!("Error when creating directory: {err}"))?;
+    fs::create_dir(format!("{name}/services"))
+        .map_err(|err| format!("Error when creating directory: {err}"))?;
+    fs::create_dir(format!("{name}/salts"))
+        .map_err(|err| format!("Error when creating directory: {err}"))?;
     create_master_password(master_password, name);
+    Ok(())
 }
 
 /// Checks if the directory and the correct files and directories exists
