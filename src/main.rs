@@ -52,6 +52,7 @@ struct Args {
 }
 
 fn main() {
+    let mut modified = false;
     let args = Args::parse();
     let mut menu = Menu::new(
         MenuConfig {
@@ -65,6 +66,7 @@ fn main() {
             "4. List passwords".to_string(),
             "5. Generate password".to_string(),
             "6. Save & quit".to_string(),
+            "7. Quit".to_string(),
         ],
     );
     let (directory, master_password, is_new) = {
@@ -92,11 +94,11 @@ fn main() {
         }
     }
     loop {
-        run(menu.interact(), &mut password_array);
+        run(menu.interact(), &mut password_array, &mut modified);
     }
 }
 
-fn run(index: usize, password_array: &mut PasswordArray) {
+fn run(index: usize, password_array: &mut PasswordArray, password_array_modified: &mut bool) {
     match index {
         0 => {
             let service = input(
@@ -110,7 +112,9 @@ fn run(index: usize, password_array: &mut PasswordArray) {
             if result.is_err() {
                 println!("{}", result.unwrap_err());
                 pause();
+                return;
             }
+            *password_array_modified = true
         }
         1 => {
             let service = input(
@@ -124,7 +128,9 @@ fn run(index: usize, password_array: &mut PasswordArray) {
             if result.is_err() {
                 println!("{}", result.unwrap_err());
                 pause();
+                return;
             }
+            *password_array_modified = true
         }
         2 => {
             let service = input(
@@ -137,7 +143,9 @@ fn run(index: usize, password_array: &mut PasswordArray) {
             if result.is_err() {
                 println!("{}", result.unwrap_err());
                 pause();
+                return;
             }
+            *password_array_modified = true
         }
         3 => {
             let table = password_array.table();
@@ -166,8 +174,11 @@ fn run(index: usize, password_array: &mut PasswordArray) {
                 let res =
                     password_array.add_password(service, SecretString::from(generated_password));
                 if res.is_err() {
-                    println!("{}", res.unwrap_err())
+                    println!("{}", res.unwrap_err());
+                    pause();
+                    return;
                 }
+                *password_array_modified = true
             }
         }
         5 => {
@@ -178,6 +189,21 @@ fn run(index: usize, password_array: &mut PasswordArray) {
                 exit(1)
             }
             exit(0)
+        }
+        6 => {
+            if *password_array_modified {
+                let answer = input(
+                    "You have some unsaved changes, are you sure? ",
+                    "no".to_string(),
+                    NO_COMMANDS,
+                    NO_FLAGS,
+                );
+                if YESES.iter().any(|y| *y == answer.to_lowercase().trim()) {
+                    exit(0)
+                } else {
+                    return;
+                }
+            }
         }
         _ => {}
     }
