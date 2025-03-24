@@ -506,14 +506,9 @@ pub fn input(
                 }
                 if is_blacklist
                     && !allow_blacklist
-                    && !parse(&buffer, commands, true)
+                    && parse(&buffer, commands, true)
                         .iter()
-                        .filter(|t| match t {
-                            Token::InvalidCommand(_) => true,
-                            _ => false,
-                        })
-                        .collect::<Vec<&Token>>()
-                        .is_empty()
+                        .any(|token| matches!(token, &Token::InvalidCommand(_)))
                 {
                     continue;
                 }
@@ -550,7 +545,7 @@ pub fn input(
     }
 }
 
-fn new_directory() -> (String, SecretString, bool) {
+fn new_directory() -> Result<(String, SecretString, bool), String> {
     loop {
         let directory_name: String = input(
             "Directory name: ",
@@ -566,9 +561,9 @@ fn new_directory() -> (String, SecretString, bool) {
             ],
         );
         let master_password = new_password_input("Master password: ");
-        initialize_directory(&directory_name, master_password.expose_secret());
+        initialize_directory(&directory_name, master_password.expose_secret())?;
         println!();
-        return (directory_name, master_password, true);
+        return Ok((directory_name, master_password, true));
     }
 }
 
@@ -636,7 +631,7 @@ fn process_command(command: &str) {
 }
 
 /// Gives a prompt to the user to choose a directory
-pub fn directory_selector(format_string: String) -> (String, SecretString, bool) {
+pub fn directory_selector(format_string: String) -> Result<(String, SecretString, bool), String> {
     let commands = all_commands();
     let mut prompt = directory_selector_prompt(&format_string);
     loop {
@@ -656,7 +651,7 @@ pub fn directory_selector(format_string: String) -> (String, SecretString, bool)
                 continue;
             }
             if command == "new" {
-                return new_directory();
+                return Ok(new_directory()?);
             }
             process_command(command);
             continue;
@@ -682,7 +677,7 @@ pub fn directory_selector(format_string: String) -> (String, SecretString, bool)
                 continue;
             }
             let master_password = prompt_master_password(&directory_name);
-            return (directory_name, master_password, false);
+            return Ok((directory_name, master_password, false));
         } else {
             println!("{RED}{BOLD}Command not found{RESET}");
         }

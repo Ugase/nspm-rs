@@ -71,7 +71,12 @@ fn main() {
     );
     let (directory, master_password, is_new) = {
         if &args.directory == "\0\0\0\0" {
-            directory_selector(args.format_string)
+            let result = directory_selector(args.format_string);
+            if result.is_err() {
+                eprintln!("Something went wrong: {}", result.unwrap_err());
+                exit(1)
+            }
+            result.unwrap()
         } else if !verify_directory(&args.directory) {
             eprintln!(
                 "{RED}Error: The directory provided either doesn't have the correct structure or it doesn't exist{RESET}"
