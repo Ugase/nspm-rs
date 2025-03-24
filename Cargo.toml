@@ -2,16 +2,16 @@
 name = "nspm"
 version = "1.0.0"
 edition = "2024"
-description = "A password manager i made for fun and learning (don't use this for real)"
+description = "A password manager i made for fun and learning (don't use this for real and not guaranteed to work)"
 license = "MIT"
 
 [dependencies]
 argon2 = { version = "0.5.3", features = ["alloc", "password-hash"] }
 rand = { version = "0.9.0", features = ["std_rng"] }
 rand_core = { version = "0.9", features = ["os_rng"] }
+clap = { version = "4.5.32", features = ["derive"] }
 fernet = "0.2.2"
 secrecy = "0.10.3"
 base64 = "0.22.1"
 getch-rs = "0.2.0"
 comfy-table = "7.1.3"
-clap = { version = "4.5.32", features = ["derive"] }
