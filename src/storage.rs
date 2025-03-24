@@ -25,17 +25,109 @@ pub struct Password {
     is_encrypted: bool,
 }
 
+impl Password {
+    /// creates a new password with a randomly generated salt
+    pub fn new(service_name: String, password: SecretString, master: SecretString) -> Password {
+        Password {
+            service: service_name,
+            password,
+            salt: generate_salt(&mut OsRng).unwrap(),
+            key: master,
+            is_encrypted: false,
+        }
+    }
+    /// saves [Password]'s details to 3 different files
+    pub fn save(
+        &self,
+        password_location: &str,
+        salt_location: &str,
+        service_location: &str,
+    ) -> Result<(), String> {
+        if !self.is_encrypted {
+            panic!("not encrypted");
+        }
+        fs::write(password_location, self.password.expose_secret())
+            .map_err(|err| format!("Error when writing password: {err}"))?;
+        fs::write(salt_location, self.salt.as_str())
+            .map_err(|err| format!("Error when writing salt: {err}"))?;
+        fs::write(service_location, &self.service)
+            .map_err(|err| format!("Error when writing service: {err}"))?;
+        Ok(())
+    }
+    /// Makes encrypted [Password] from the 3 files that [Password::save] writes
+    /// Assumes that the password is encrypted
+    ///
+    /// # Panics
+    /// Panics if either one of the file locations doesn't exist or if the salt stored at salt
+    /// location is not in base64
+    pub fn load(
+        password_location: &str,
+        salt_location: &str,
+        service_location: &str,
+        master_password: &str,
+    ) -> Result<Password, String> {
+        Ok(Password {
+            password: SecretString::from(
+                fs::read_to_string(password_location)
+                    .map_err(|err| format!("Failed to read: {password_location}, Error: {err}"))?,
+            ),
+            salt: SaltString::from_b64(
+                &fs::read_to_string(salt_location)
+                    .map_err(|err| format!("Failed to read {salt_location}, Error: {err}"))?,
+            )
+            .map_err(|err| format!("Failed to decode from base64: {err}"))?,
+            service: fs::read_to_string(service_location)
+                .map_err(|err| format!("Failed to read {service_location}: {err}"))?,
+            key: SecretString::from(master_password),
+            is_encrypted: true,
+        })
+    }
+    /// encrypts the password with key (doesn't encrypt when already encrypted)
+    /// also throws away the key
+    pub fn encrypt(&mut self) -> Result<(), &str> {
+        if self.is_encrypted {
+            return Err("already encrypted");
+        }
+        self.password = SecretString::from(encrypt(
+            self.password.expose_secret().as_bytes(),
+            self.key.expose_secret().as_bytes(),
+            self.salt.clone(),
+        ));
+        self.key = SecretString::from("");
+        self.is_encrypted = true;
+        Ok(())
+    }
+    /// decrypts the password using the key
+    /// Fails if [Password]'s password is already decrypted or when the key is empty
+    pub fn decrypt(&mut self) -> Result<(), String> {
+        if !self.is_encrypted {
+            return Err("already decrypted".to_string());
+        }
+        if self.key.expose_secret().is_empty() {
+            return Err("no key".to_string());
+        }
+        self.password = decrypt(
+            self.password.expose_secret().as_bytes(),
+            self.key.expose_secret().as_bytes(),
+            self.salt.clone(),
+        )?;
+        self.is_encrypted = false;
+        Ok(())
+    }
+    fn edit_password(&mut self, new_pass: SecretString) -> Result<(), &str> {
+        if self.is_encrypted {
+            return Err("is encrypted");
+        }
+        self.password = new_pass;
+        Ok(())
+    }
+}
+
 /// An array of [`Password`] that's better than an array of [`Password`]
 pub struct PasswordArray {
     passwords: Vec<Password>,
     master_password: SecretString,
     directory_name: String,
-}
-
-pub fn simpler_print(data: String) {
-    let mut buf = stdout();
-    print!("{data}");
-    let _ = buf.flush();
 }
 
 impl PasswordArray {
@@ -235,110 +327,10 @@ impl PasswordArray {
     }
 }
 
-impl Password {
-    /// creates a new password with a randomly generated salt
-    pub fn new(service_name: String, password: SecretString, master: SecretString) -> Password {
-        Password {
-            service: service_name,
-            password,
-            salt: generate_salt(&mut OsRng).unwrap(),
-            key: master,
-            is_encrypted: false,
-        }
-    }
-    /// saves [Password]'s details to 3 different files
-    pub fn save(
-        &self,
-        password_location: &str,
-        salt_location: &str,
-        service_location: &str,
-    ) -> Result<(), String> {
-        if !self.is_encrypted {
-            panic!("not encrypted");
-        }
-        fs::write(password_location, self.password.expose_secret())
-            .map_err(|err| format!("Error when writing password: {err}"))?;
-        fs::write(salt_location, self.salt.as_str())
-            .map_err(|err| format!("Error when writing salt: {err}"))?;
-        fs::write(service_location, &self.service)
-            .map_err(|err| format!("Error when writing service: {err}"))?;
-        Ok(())
-    }
-    /// Makes encrypted [Password] from the 3 files that [Password::save] writes
-    /// Assumes that the password is encrypted
-    ///
-    /// # Panics
-    /// Panics if either one of the file locations doesn't exist or if the salt stored at salt
-    /// location is not in base64
-    pub fn load(
-        password_location: &str,
-        salt_location: &str,
-        service_location: &str,
-        master_password: &str,
-    ) -> Result<Password, String> {
-        Ok(Password {
-            password: SecretString::from(
-                fs::read_to_string(password_location)
-                    .map_err(|err| format!("Failed to read: {password_location}, Error: {err}"))?,
-            ),
-            salt: SaltString::from_b64(
-                &fs::read_to_string(salt_location)
-                    .map_err(|err| format!("Failed to read {salt_location}, Error: {err}"))?,
-            )
-            .map_err(|err| format!("Failed to decode from base64: {err}"))?,
-            service: fs::read_to_string(service_location)
-                .map_err(|err| format!("Failed to read {service_location}: {err}"))?,
-            key: SecretString::from(master_password),
-            is_encrypted: true,
-        })
-    }
-    /// encrypts the password with key (doesn't encrypt when already encrypted)
-    /// also throws away the key
-    pub fn encrypt(&mut self) -> Result<(), &str> {
-        if self.is_encrypted {
-            return Err("already encrypted");
-        }
-        self.password = SecretString::from(encrypt(
-            self.password.expose_secret().as_bytes(),
-            self.key.expose_secret().as_bytes(),
-            self.salt.clone(),
-        ));
-        self.key = SecretString::from("");
-        self.is_encrypted = true;
-        Ok(())
-    }
-    /// decrypts the password using the key
-    /// Fails if [Password]'s password is already decrypted or when the key is empty
-    pub fn decrypt(&mut self) -> Result<(), String> {
-        if !self.is_encrypted {
-            return Err("already decrypted".to_string());
-        }
-        if self.key.expose_secret().is_empty() {
-            return Err("no key".to_string());
-        }
-        self.password = decrypt(
-            self.password.expose_secret().as_bytes(),
-            self.key.expose_secret().as_bytes(),
-            self.salt.clone(),
-        )?;
-        self.is_encrypted = false;
-        Ok(())
-    }
-    fn edit_password(&mut self, new_pass: SecretString) -> Result<(), &str> {
-        if self.is_encrypted {
-            return Err("is encrypted");
-        }
-        self.password = new_pass;
-        Ok(())
-    }
-}
-
-fn create_master_password(master_password: &str, dir_name: &str) {
-    let salt = generate_salt(&mut OsRng).unwrap();
-    let _ = fs::write(
-        format!("{dir_name}/master_password"),
-        hash(master_password.as_bytes(), &salt).unwrap(),
-    );
+pub fn simpler_print(data: String) {
+    let mut buf = stdout();
+    print!("{data}");
+    let _ = buf.flush();
 }
 
 /// Gets master password and its salt the directory must exist and is valid for this function to
@@ -387,6 +379,14 @@ pub fn verify_directory(dir_name: &str) -> bool {
         return false;
     }
     true
+}
+
+fn create_master_password(master_password: &str, dir_name: &str) {
+    let salt = generate_salt(&mut OsRng).unwrap();
+    let _ = fs::write(
+        format!("{dir_name}/master_password"),
+        hash(master_password.as_bytes(), &salt).unwrap(),
+    );
 }
 
 fn sleep(duration_millis: u64) {

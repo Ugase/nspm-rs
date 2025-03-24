@@ -6,17 +6,58 @@ pub mod cryptography;
 pub mod storage;
 pub mod ui;
 
+use ansi::constants::*;
+use clap::Parser;
 use secrecy::SecretString;
 use std::process::exit;
-use storage::PasswordArray;
+use storage::{PasswordArray, verify_directory};
 use ui::{
     ALL_FLAGS, InputFlags, Menu, MenuConfig, NO_COMMANDS, NO_FLAGS, YESES, directory_selector,
-    generate_password, input, new_password_input, pause, prompt_number,
+    generate_password, input, new_password_input, pause, prompt_master_password, prompt_number,
 };
 
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    #[arg(short, long, default_value_t = String::from("\0\0\0\0"))]
+    /// The directory nspm uses, if not specified it'll bring up the directory selector
+    directory: String,
+
+    #[arg(short, long, default_value_t = String::from("nspm v1.0.0"))]
+    /// Menu prompt
+    prompt: String,
+
+    #[arg(short, long, default_value_t = String::from(">"))]
+    /// character(s) pointing to which option is currently selected
+    icon: String,
+
+    #[arg(short, long, default_value_t = String::from("%b%s%R %m❯ %R"), verbatim_doc_comment)]
+    /// format string for directory prompt
+    ///
+    /// format string:  
+    ///
+    /// RESET: %R  
+    /// BOLD: %B  
+    /// BLACK: %l  
+    /// RED: %r  
+    /// GREEN: %g  
+    /// YELLOW: %y  
+    /// BLUE: %b  
+    /// MAGENTA: %m  
+    /// CYAN: %c  
+    /// WHITE: %w  
+    /// short_path: %s  
+    /// absolute_path: %S  
+    format_string: String,
+}
+
 fn main() {
+    let args = Args::parse();
     let mut menu = Menu::new(
-        MenuConfig::default(),
+        MenuConfig {
+            prompt: args.prompt,
+            icon: args.icon,
+        },
         vec![
             "1. Add a password".to_string(),
             "2. Edit a password".to_string(),
@@ -26,13 +67,28 @@ fn main() {
             "6. Save & quit".to_string(),
         ],
     );
-    let (directory, master_password, is_new) = directory_selector();
+    let (directory, master_password, is_new) = {
+        if &args.directory == "\0\0\0\0" {
+            directory_selector(args.format_string)
+        } else if !verify_directory(&args.directory) {
+            eprintln!(
+                "{RED}Error: The directory provided either doesn't have the correct structure or it doesn't exist{RESET}"
+            );
+            exit(1);
+        } else {
+            (
+                args.directory.clone(),
+                prompt_master_password(&args.directory),
+                false,
+            )
+        }
+    };
     let mut password_array = PasswordArray::new(master_password, directory);
     if !is_new {
         let result = password_array.load(true);
         if result.is_err() {
-            let result = result.unwrap_err();
-            eprintln!("{result}")
+            let error = result.unwrap_err();
+            eprintln!("{error}")
         }
     }
     loop {
@@ -91,9 +147,7 @@ fn run(index: usize, password_array: &mut PasswordArray) {
         }
         4 => {
             let generated_password = generate_password(
-                prompt_number("Length of generated password: ", "14".to_string())
-                    .try_into()
-                    .unwrap(),
+                prompt_number("Length of generated password: ", "14".to_string()).into(),
             );
             println!("\nGenerated password: {generated_password}");
             let answer = input(
@@ -119,8 +173,8 @@ fn run(index: usize, password_array: &mut PasswordArray) {
         5 => {
             let result = password_array.save(true);
             if result.is_err() {
-                let result = result.unwrap_err();
-                eprintln!("\n{result}");
+                let error = result.unwrap_err();
+                eprintln!("\n{error}");
                 exit(1)
             }
             exit(0)

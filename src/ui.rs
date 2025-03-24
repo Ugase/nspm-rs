@@ -1,5 +1,5 @@
 use crate::{
-    ansi::{CLEAR, Csi, EL, colors::*},
+    ansi::{CLEAR, Csi, EL, colors::AnsiRGB, constants::*},
     cryptography::check_hash,
     storage::{get_master_password, initialize_directory, verify_directory},
 };
@@ -13,9 +13,11 @@ use std::{
     fs,
     io::{self, Write},
 };
+
 const V: &str = "✔";
 const W: &str = "⚠︎";
 const HELP_MESSAGE: &str = "There are a total of 7 commands (which have alaises):\n\nchoose (no other alias): Chooses a directory. Only accepts directories with the correct files\ncd (no other alias): Changes current working directory\nls (no other alias): Lists the contents of the current working directory\nexit (q, quit, ex): Exits the program\nclear (c, cls): clears the screen\nnew (init, new_session, make): clears the screen and prompts the user for the new directories name and the master password to store the hash in the master_password file\nhelp (h, ?): Shows this help\n\nUsage:\n\nCommands with no arguments: ls, exit, clear, help, new\n\ncd: cd {dirname}\nchoose: choose {dirname}";
+
 pub const YESES: [&str; 15] = [
     "y",
     "yes",
@@ -33,6 +35,7 @@ pub const YESES: [&str; 15] = [
     "s",
     "se",
 ];
+
 const CHARS: [&str; 94] = [
     "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s",
     "t", "u", "v", "w", "x", "y", "z", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L",
@@ -40,33 +43,30 @@ const CHARS: [&str; 94] = [
     "5", "6", "7", "8", "9", "!", "\"", "#", "$", "%", "&", "'", "(", ")", "*", "+", ",", "-", ".",
     "/", ":", ";", "<", "=", ">", "?", "@", "[", "\\", "]", "^", "_", "`", "{", "|", "}", "~",
 ];
+
 pub const ALL_FLAGS: [InputFlags; 4] = [
     InputFlags::HighlightInput,
     InputFlags::IsBlacklist,
     InputFlags::DenyEmptyInput,
     InputFlags::AllowBlacklist,
 ];
+
 pub const NO_FLAGS: &[InputFlags; 0] = &[];
 pub const NO_COMMANDS: &[String; 0] = &[];
+
 const COMMANDS: [&str; 7] = ["choose", "cd", "ls", "exit", "clear", "new", "help"];
+
 const EXIT_ALIASES: [&str; 3] = ["q", "quit", "ex"];
 const NEW_ALIASES: [&str; 3] = ["new", "new_session", "make"];
 const CLEAR_ALIASES: [&str; 2] = ["c", "cls"];
 const HELP_ALIASES: [&str; 2] = ["h", "?"];
+
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum Token {
     InvalidCommand(String),
     Command(String),
     Text(String),
     Whitespace(char),
-}
-
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum InputFlags {
-    DenyEmptyInput,
-    HighlightInput,
-    IsBlacklist,
-    AllowBlacklist,
 }
 
 impl Display for Token {
@@ -80,94 +80,79 @@ impl Display for Token {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum InputFlags {
+    DenyEmptyInput,
+    HighlightInput,
+    IsBlacklist,
+    AllowBlacklist,
+}
+
+#[derive(Debug)]
+pub struct ProgressBar<'a> {
+    n: u32,
+    d: u32,
+    left: char,
+    right: char,
+    filled: &'a str,
+    unfilled: &'a str,
+    stop1: AnsiRGB,
+    stop2: AnsiRGB,
+    stop3: AnsiRGB,
+    length: usize,
+}
+
+impl Display for ProgressBar<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let percent: f64 = self.n as f64 / (self.d as f64 / self.length as f64);
+        let usp: usize = percent as usize;
+        let (left, right, gradient_color, filled, unfilled) = (
+            self.left,
+            self.right,
+            self.stop1.gradient(
+                (self.n as f64 * 100.0) / self.d as f64,
+                self.stop2,
+                self.stop3,
+            ),
+            self.filled.repeat(usp),
+            self.unfilled.repeat(self.length - usp),
+        );
+        write!(f, "{left}{gradient_color}{filled}{RESET}{unfilled}{right}",)
+    }
+}
+
+impl ProgressBar<'_> {
+    /// Creates a new progress bar
+    pub fn new(d: u32) -> Self {
+        Self {
+            n: 0,
+            d,
+            left: '[',
+            right: ']',
+            filled: "#",
+            unfilled: "─",
+            length: 50,
+            stop1: AnsiRGB { r: 255, g: 0, b: 0 },
+            stop2: AnsiRGB {
+                r: 255,
+                g: 255,
+                b: 0,
+            },
+            stop3: AnsiRGB {
+                r: 50,
+                g: 255,
+                b: 0,
+            },
+        }
+    }
+    pub fn increase_n(&mut self) {
+        self.n += 1;
+    }
+}
+
 pub struct MenuConfig {
     pub prompt: String,
     pub icon: String,
-}
-
-struct VecIndex<T> {
-    vector: Vec<T>,
-    index: usize,
-}
-
-impl<T> VecIndex<T> {
-    fn new(vector: Vec<T>) -> Self {
-        Self { vector, index: 0 }
-    }
-    fn next(&mut self) {
-        if self.index + 1 >= self.vector.len() {
-            self.index = 0;
-        } else {
-            self.index += 1
-        }
-    }
-    fn prev(&mut self) {
-        if self.index == 0 {
-            self.index = self.vector.len() - 1
-        } else {
-            self.index -= 1
-        }
-    }
-}
-
-impl Default for MenuConfig {
-    fn default() -> Self {
-        Self {
-            prompt: "nspm v1.0.0".to_string(),
-            icon: ">".to_string(),
-        }
-    }
-}
-
-// this is ugly
-fn all_commands() -> Vec<String> {
-    let mut command: Vec<String> = COMMANDS.iter().map(|s| s.to_owned().to_owned()).collect();
-    command.append(
-        &mut EXIT_ALIASES
-            .iter()
-            .map(|s| s.to_owned().to_owned())
-            .collect(),
-    );
-    command.append(
-        &mut CLEAR_ALIASES
-            .iter()
-            .map(|s| s.to_owned().to_owned())
-            .collect::<Vec<String>>(),
-    );
-    command.append(
-        &mut NEW_ALIASES
-            .iter()
-            .map(|s| s.to_owned().to_owned())
-            .collect::<Vec<String>>(),
-    );
-    command.append(
-        &mut HELP_ALIASES
-            .iter()
-            .map(|s| s.to_owned().to_owned())
-            .collect::<Vec<String>>(),
-    );
-    command
-}
-
-fn process_alias(alias: &str) -> &str {
-    let alias = alias.trim();
-    if COMMANDS.contains(&alias) {
-        return alias;
-    } else if EXIT_ALIASES.contains(&alias) {
-        return "exit";
-    } else if CLEAR_ALIASES.contains(&alias) {
-        return "clear";
-    } else if NEW_ALIASES.contains(&alias) {
-        return "new";
-    } else if HELP_ALIASES.contains(&alias) {
-        return "help";
-    }
-    ""
-}
-
-fn directory_selector_prompt() -> String {
-    let current_directory = getcwd_short();
-    format!("{BLUE}{current_directory}{RESET} {MAGENTA}❯ {RESET}")
 }
 
 /// A way simpler [Select](<https://docs.rs/dialoguer/latest/dialoguer/struct.Select.html>)
@@ -233,66 +218,118 @@ impl Menu {
     }
 }
 
-#[derive(Debug)]
-pub struct ProgressBar<'a> {
-    n: u32,
-    d: u32,
-    left: char,
-    right: char,
-    filled: &'a str,
-    unfilled: &'a str,
-    stop1: AnsiRGB,
-    stop2: AnsiRGB,
-    stop3: AnsiRGB,
-    length: usize,
+struct VecIndex<T> {
+    vector: Vec<T>,
+    index: usize,
 }
 
-impl ProgressBar<'_> {
-    /// Creates a new progress bar
-    pub fn new(d: u32) -> Self {
-        Self {
-            n: 0,
-            d,
-            left: '[',
-            right: ']',
-            filled: "#",
-            unfilled: "─",
-            length: 50,
-            stop1: AnsiRGB { r: 255, g: 0, b: 0 },
-            stop2: AnsiRGB {
-                r: 255,
-                g: 255,
-                b: 0,
-            },
-            stop3: AnsiRGB {
-                r: 50,
-                g: 255,
-                b: 0,
-            },
+impl<T> VecIndex<T> {
+    fn new(vector: Vec<T>) -> Self {
+        Self { vector, index: 0 }
+    }
+    fn next(&mut self) {
+        if self.index + 1 >= self.vector.len() {
+            self.index = 0;
+        } else {
+            self.index += 1
         }
     }
-    pub fn increase_n(&mut self) {
-        self.n += 1;
+    fn prev(&mut self) {
+        if self.index == 0 {
+            self.index = self.vector.len() - 1
+        } else {
+            self.index -= 1
+        }
     }
 }
 
-impl Display for ProgressBar<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let percent: f64 = self.n as f64 / (self.d as f64 / self.length as f64);
-        let usp: usize = percent as usize;
-        let (left, right, gradient_color, filled, unfilled) = (
-            self.left,
-            self.right,
-            self.stop1.gradient(
-                (self.n as f64 * 100.0) / self.d as f64,
-                self.stop2,
-                self.stop3,
-            ),
-            self.filled.repeat(usp),
-            self.unfilled.repeat(self.length - usp),
-        );
-        write!(f, "{left}{gradient_color}{filled}{RESET}{unfilled}{right}",)
+// this is ugly
+fn all_commands() -> Vec<String> {
+    let mut command: Vec<String> = COMMANDS.iter().map(|s| s.to_owned().to_owned()).collect();
+    command.append(
+        &mut EXIT_ALIASES
+            .iter()
+            .map(|s| s.to_owned().to_owned())
+            .collect(),
+    );
+    command.append(
+        &mut CLEAR_ALIASES
+            .iter()
+            .map(|s| s.to_owned().to_owned())
+            .collect::<Vec<String>>(),
+    );
+    command.append(
+        &mut NEW_ALIASES
+            .iter()
+            .map(|s| s.to_owned().to_owned())
+            .collect::<Vec<String>>(),
+    );
+    command.append(
+        &mut HELP_ALIASES
+            .iter()
+            .map(|s| s.to_owned().to_owned())
+            .collect::<Vec<String>>(),
+    );
+    command
+}
+
+fn process_alias(alias: &str) -> &str {
+    let alias = alias.trim();
+    if COMMANDS.contains(&alias) {
+        return alias;
+    } else if EXIT_ALIASES.contains(&alias) {
+        return "exit";
+    } else if CLEAR_ALIASES.contains(&alias) {
+        return "clear";
+    } else if NEW_ALIASES.contains(&alias) {
+        return "new";
+    } else if HELP_ALIASES.contains(&alias) {
+        return "help";
     }
+    ""
+}
+
+fn directory_selector_prompt(format_string: &str) -> String {
+    let mut on_percent = false;
+    let mut res = String::new();
+    for character in format_string.chars().chain("%R".chars()) {
+        // BOLD: %B
+        // RESET: %R
+        // BLACK: %l
+        // RED: %r
+        // GREEN: %g
+        // YELLOW: %y
+        // BLUE: %b
+        // MAGENTA: %m
+        // CYAN: %c
+        // WHITE: %w
+        // short_path: %s
+        // absolute_path: %S
+        if on_percent {
+            on_percent = false;
+            match character {
+                'R' => res.push_str(RESET),
+                'l' => res.push_str(BLACK),
+                'B' => res.push_str(BOLD),
+                'r' => res.push_str(RED),
+                'g' => res.push_str(GREEN),
+                'y' => res.push_str(YELLOW),
+                'b' => res.push_str(BLUE),
+                'm' => res.push_str(MAGENTA),
+                'c' => res.push_str(CYAN),
+                'w' => res.push_str(WHITE),
+                'S' => res.push_str(&getcwd()),
+                's' => res.push_str(&getcwd_short()),
+                '%' => res.push('%'),
+                c => res.push(c),
+            }
+        } else if character == '%' {
+            on_percent = true;
+        } else {
+            res.push(character);
+        }
+    }
+    res
 }
 
 fn evaluate_password(password: &str) {
@@ -571,7 +608,7 @@ fn check_master_password(directory_name: &str, input: &str) -> bool {
     true
 }
 
-fn prompt_master_password(directory_name: &str) -> SecretString {
+pub fn prompt_master_password(directory_name: &str) -> SecretString {
     for _ in 1..=3 {
         let master = password_input("Master password: ");
         println!();
@@ -599,11 +636,12 @@ fn process_command(command: &str) {
 }
 
 /// Gives a prompt to the user to choose a directory
-pub fn directory_selector() -> (String, SecretString, bool) {
+pub fn directory_selector(format_string: String) -> (String, SecretString, bool) {
     let commands = all_commands();
+    let mut prompt = directory_selector_prompt(&format_string);
     loop {
         let usr = input(
-            directory_selector_prompt(),
+            prompt.clone(),
             String::new(),
             &commands,
             &[InputFlags::HighlightInput],
@@ -627,8 +665,10 @@ pub fn directory_selector() -> (String, SecretString, bool) {
         if command == "cd" {
             let cd_result = std::env::set_current_dir(command_input);
             if cd_result.is_err() {
-                eprintln!("{}", cd_result.unwrap_err())
+                eprintln!("{}", cd_result.unwrap_err());
+                continue;
             }
+            prompt = directory_selector_prompt(&format_string);
         } else if command == "choose" {
             let directory_name: String = Path::new(&getcwd())
                 .join(command_input)
@@ -637,7 +677,7 @@ pub fn directory_selector() -> (String, SecretString, bool) {
                 .to_string();
             if !verify_directory(&directory_name) {
                 println!(
-                    "Either the directory provided doesn't exist or it doesn't have the correct files and directories"
+                    "Either the directory provided doesn't exist or it doesn't have the correct structure"
                 );
                 continue;
             }
@@ -668,7 +708,7 @@ pub fn generate_password(length: u32) -> String {
     let mut os = StdRng::from_os_rng();
     let mut generated_password = String::new();
     for _ in 0..length {
-        generated_password.push_str(CHARS.get(os.random_range(..94usize)).unwrap());
+        generated_password.push_str(CHARS.get(os.random_range(..CHARS.len())).unwrap());
     }
     generated_password
 }

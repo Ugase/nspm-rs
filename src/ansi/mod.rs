@@ -1,6 +1,7 @@
 use std::fmt::Display;
 use std::io::{Write, stdout};
 pub mod colors;
+pub mod constants;
 
 pub const ESC: &str = "\x1b[";
 pub const CLEAR: &str = "\x1b[H\x1b[2J\x1b[3J";
@@ -37,10 +38,10 @@ impl Display for Csi {
             Csi::El(e) => match e {
                 //EL::EL0 => return ansi("K"),
                 //EL::EL1 => return ansi("1K"),
-                EL::EL2 => return write!(f, "{}", ansi("2K")),
+                EL::EL2 => write!(f, "{}", ansi("2K")),
             },
-            Csi::Hide => return write!(f, "{}", ansi("?25l")),
-            Csi::Show => return write!(f, "{}", ansi("?25h")),
+            Csi::Hide => write!(f, "{}", ansi("?25l")),
+            Csi::Show => write!(f, "{}", ansi("?25h")),
         }
     }
 }
