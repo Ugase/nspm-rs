@@ -83,11 +83,8 @@ fn main() {
             );
             exit(1);
         } else {
-            (
-                args.directory.clone(),
-                prompt_master_password(&args.directory),
-                false,
-            )
+            let master_password = prompt_master_password(&args.directory);
+            (args.directory, master_password, false)
         }
     };
     let mut password_array = PasswordArray::new(master_password, directory);
