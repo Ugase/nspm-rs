@@ -23,7 +23,7 @@ struct Args {
     /// The directory nspm uses, if not specified it'll bring up the directory selector
     directory: String,
 
-    #[arg(short, long, default_value_t = String::from("nspm v1.0.0"))]
+    #[arg(short, long, default_value_t = String::from("nspm v1.0.1"))]
     /// Menu prompt
     prompt: String,
 
