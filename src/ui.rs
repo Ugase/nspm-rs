@@ -6,7 +6,6 @@ use crate::{
 use getch_rs::{Getch, Key};
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use secrecy::{ExposeSecret, SecretString};
-use std::path::Path;
 use std::{
     collections::HashSet,
     fmt::Display,
@@ -14,6 +13,7 @@ use std::{
     io::{self, Write},
     mem::take,
 };
+use std::{path::Path, process::exit};
 
 const V: &str = "✔";
 const W: &str = "⚠︎";
@@ -194,7 +194,7 @@ impl Menu {
                 | Ok(Key::Char('h')) => {
                     self.selection.prev();
                 }
-                Ok(Key::Ctrl('c')) => std::process::exit(1),
+                Ok(Key::Ctrl('c')) => exit(1),
                 Ok(_key) => {}
                 Err(e) => eprintln!("{e}"),
             }
@@ -374,7 +374,7 @@ pub fn new_password_input(prompt: impl Display) -> secrecy::SecretString {
             Ok(Key::Delete) => {
                 password.pop();
             }
-            Ok(Key::Ctrl('c')) => std::process::exit(1),
+            Ok(Key::Ctrl('c')) => exit(1),
             Ok(_key) => {}
             Err(e) => eprintln!("{e}"),
         }
@@ -405,7 +405,7 @@ pub fn password_input(prompt: impl Display) -> SecretString {
             Ok(Key::Delete) => {
                 password.pop();
             }
-            Ok(Key::Ctrl('c')) => std::process::exit(1),
+            Ok(Key::Ctrl('c')) => exit(1),
             Ok(_key) => {}
             Err(e) => eprintln!("{e}"),
         }
@@ -468,7 +468,6 @@ fn parse(string: &String, commands: &[String], parse_invalid: bool) -> Vec<Token
     }
     tokens
 }
-
 pub fn input(
     prompt: impl Display,
     default: String,
@@ -513,7 +512,7 @@ pub fn input(
             Ok(Key::Backspace) | Ok(Key::Delete) => {
                 buffer.pop();
             }
-            Ok(Key::Ctrl('c')) | Ok(Key::Ctrl('z')) => std::process::exit(1),
+            Ok(Key::Ctrl('c')) | Ok(Key::Ctrl('z')) => exit(1),
             Ok(_key) => {}
             Err(e) => eprintln!("{e}"),
         }
@@ -536,7 +535,6 @@ pub fn input(
         let _ = stdout.flush();
     }
 }
-
 fn new_directory() -> Result<(String, SecretString, bool), String> {
     loop {
         let directory_name: String = input(
@@ -605,14 +603,14 @@ pub fn prompt_master_password(directory_name: &str) -> SecretString {
         return master;
     }
     eprintln!("3 incorrect password attempts");
-    std::process::exit(1)
+    exit(1)
 }
 
 fn process_command(command: &str) {
     if command == "ls" {
         list_directory(&getcwd());
     } else if command == "exit" {
-        std::process::exit(0)
+        exit(0)
     } else if command == "clear" {
         println!("{CLEAR}");
     } else if command == "help" {
@@ -684,7 +682,7 @@ pub fn pause() {
     let _ = buf.flush();
     let chr = getch.getch();
     match chr {
-        Ok(Key::Ctrl('c')) => std::process::exit(1),
+        Ok(Key::Ctrl('c')) => exit(1),
         Ok(_key) => {}
         Err(e) => eprintln!("{e}"),
     }
@@ -704,10 +702,12 @@ pub fn generate_password(length: u32) -> String {
 pub fn prompt_number(prompt: &str, default: String) -> u32 {
     loop {
         let number = input(prompt, default.clone(), NO_COMMANDS, NO_FLAGS);
-        if !number.bytes().all(|b| b.is_ascii_digit()) {
+        if number.bytes().any(|b| !b.is_ascii_digit()) {
             continue;
         }
-        let number: u32 = number.parse().unwrap();
-        return number;
+        match number.parse::<u32>() {
+            Ok(n) => return n,
+            Err(err) => eprintln!("Error when parsing integer: {err}"),
+        }
     }
 }
