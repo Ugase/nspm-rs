@@ -205,6 +205,8 @@ fn run(index: usize, password_array: &mut PasswordArray, password_array_modified
                 } else {
                     return;
                 }
+            } else {
+                exit(0)
             }
         }
         _ => {}
