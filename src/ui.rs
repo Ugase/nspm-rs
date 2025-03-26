@@ -437,18 +437,20 @@ fn parse(string: &String, commands: &[String], parse_invalid: bool) -> Vec<Token
     let mut no_text_token: bool = true;
     for character in string.chars() {
         if [' ', '\t'].contains(&character) {
-            if !buffer.is_empty() {
-                if commands.contains(&buffer) && is_first_command && no_text_token {
-                    tokens.push(if parse_invalid {
-                        Token::InvalidCommand(take(&mut buffer))
-                    } else {
-                        Token::Command(take(&mut buffer))
-                    });
-                    is_first_command = false;
+            if buffer.is_empty() {
+                tokens.push(Token::Whitespace(character));
+                continue;
+            } else if commands.contains(&buffer) && is_first_command && no_text_token {
+                let t = if parse_invalid {
+                    Token::InvalidCommand(take(&mut buffer))
                 } else {
-                    tokens.push(Token::Text(take(&mut buffer)));
-                    no_text_token = false;
-                }
+                    Token::Command(take(&mut buffer))
+                };
+                tokens.push(t);
+                is_first_command = false;
+            } else {
+                tokens.push(Token::Text(take(&mut buffer)));
+                no_text_token = false;
             }
             tokens.push(Token::Whitespace(character));
         } else {
@@ -457,28 +459,30 @@ fn parse(string: &String, commands: &[String], parse_invalid: bool) -> Vec<Token
     }
     if !buffer.is_empty() {
         if commands.contains(&buffer) && is_first_command && no_text_token {
-            if parse_invalid {
-                tokens.push(Token::InvalidCommand(take(&mut buffer)))
+            let t = if parse_invalid {
+                Token::InvalidCommand(take(&mut buffer))
             } else {
-                tokens.push(Token::Command(take(&mut buffer)));
-            }
+                Token::Command(take(&mut buffer))
+            };
+            tokens.push(t);
         } else {
             tokens.push(Token::Text(take(&mut buffer)));
         }
     }
     tokens
 }
+
 pub fn input(
     prompt: impl Display,
     default: String,
     commands: &[String],
     flags: &[InputFlags],
 ) -> String {
-    let (deny_empty_input, is_blacklist, highlight_text, allow_blacklist) = (
+    let (deny_empty_input, is_blacklist, highlight_text, deny_blacklist) = (
         flags.contains(&InputFlags::DenyEmptyInput),
         flags.contains(&InputFlags::IsBlacklist),
         flags.contains(&InputFlags::HighlightInput),
-        flags.contains(&InputFlags::AllowBlacklist),
+        !flags.contains(&InputFlags::AllowBlacklist),
     );
     let getch = Getch::new();
     let mut buffer = String::new();
@@ -496,7 +500,7 @@ pub fn input(
                     return default;
                 }
                 if is_blacklist
-                    && !allow_blacklist
+                    && deny_blacklist
                     && parse(&buffer, commands, true)
                         .iter()
                         .any(|token| matches!(token, &Token::InvalidCommand(_)))
