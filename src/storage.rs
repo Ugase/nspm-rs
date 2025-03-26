@@ -91,7 +91,7 @@ impl Password {
         self.password = SecretString::from(encrypt(
             self.password.expose_secret().as_bytes(),
             self.key.expose_secret().as_bytes(),
-            self.salt.clone(),
+            &self.salt,
         ));
         self.key = SecretString::from("");
         self.is_encrypted = true;
@@ -109,7 +109,7 @@ impl Password {
         self.password = decrypt(
             self.password.expose_secret().as_bytes(),
             self.key.expose_secret().as_bytes(),
-            self.salt.clone(),
+            &self.salt,
         )?;
         self.is_encrypted = false;
         Ok(())
@@ -236,7 +236,13 @@ impl PasswordArray {
     }
     /// Adds a password to [PasswordArray]
     pub fn add_password(&mut self, service: String, password: SecretString) -> Result<(), &str> {
-        if self.get_services().contains(&service) {
+        if self
+            .passwords
+            .iter()
+            .map(|p| &p.service)
+            .collect::<Vec<_>>()
+            .contains(&&service)
+        {
             return Err("service name is taken");
         }
         self.passwords.push(Password::new(
@@ -252,7 +258,11 @@ impl PasswordArray {
         service_name: String,
         new_pass: SecretString,
     ) -> Result<(), &str> {
-        let index = self.get_services().iter().position(|s| *s == service_name);
+        let index = &self
+            .passwords
+            .iter()
+            .map(|p| &p.service)
+            .position(|s| *s == service_name);
         if index.is_none() {
             return Err("couldn't find service");
         }
@@ -263,7 +273,11 @@ impl PasswordArray {
     }
     /// (guess)
     pub fn remove_password(&mut self, service_name: String) -> Result<(), &str> {
-        let index = self.get_services().iter().position(|s| *s == service_name);
+        let index = &self
+            .passwords
+            .iter()
+            .map(|p| &p.service)
+            .position(|s| **s == service_name);
         if index.is_none() {
             return Err("couldn't find service");
         }
@@ -312,8 +326,15 @@ impl PasswordArray {
             passwords.push(password.password.expose_secret());
         }
         let mut result = vec![];
-        for (service, password) in zip(self.get_services(), passwords) {
-            result.push(vec![service, password.to_string()]);
+        for (service, password) in zip(
+            &self
+                .passwords
+                .iter()
+                .map(|p| &p.service)
+                .collect::<Vec<_>>(),
+            passwords,
+        ) {
+            result.push(vec![service, password]);
         }
         let mut tables = Table::new();
         tables
@@ -375,11 +396,10 @@ pub fn verify_directory(dir_name: &str) -> bool {
             return false;
         }
     }
-    if !(fs::read_dir(dirs[0].clone()).unwrap().count()
-        == fs::read_dir(dirs[1].clone()).unwrap().count()
-        && fs::read_dir(dirs[1].clone()).unwrap().count()
-            == fs::read_dir(dirs[2].clone()).unwrap().count())
-    {
+    let salt_count = fs::read_dir(&dirs[0]).unwrap().count();
+    let password_count = fs::read_dir(&dirs[1]).unwrap().count();
+    let service_count = fs::read_dir(&dirs[2]).unwrap().count();
+    if salt_count != password_count || password_count != service_count {
         return false;
     }
     true

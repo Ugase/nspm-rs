@@ -12,6 +12,7 @@ use std::{
     fmt::Display,
     fs,
     io::{self, Write},
+    mem::take,
 };
 
 const V: &str = "✔";
@@ -245,32 +246,27 @@ impl<T> VecIndex<T> {
 
 // this is ugly
 fn all_commands() -> Vec<String> {
-    let mut command: Vec<String> = COMMANDS.iter().map(|s| s.to_owned().to_owned()).collect();
-    command.append(
-        &mut EXIT_ALIASES
-            .iter()
-            .map(|s| s.to_owned().to_owned())
-            .collect(),
-    );
-    command.append(
+    let mut commands: Vec<String> = COMMANDS.iter().map(|s| s.to_string()).collect();
+    commands.append(&mut EXIT_ALIASES.iter().map(|s| s.to_string()).collect());
+    commands.append(
         &mut CLEAR_ALIASES
             .iter()
-            .map(|s| s.to_owned().to_owned())
+            .map(|s| s.to_string())
             .collect::<Vec<String>>(),
     );
-    command.append(
+    commands.append(
         &mut NEW_ALIASES
             .iter()
-            .map(|s| s.to_owned().to_owned())
+            .map(|s| s.to_string())
             .collect::<Vec<String>>(),
     );
-    command.append(
+    commands.append(
         &mut HELP_ALIASES
             .iter()
-            .map(|s| s.to_owned().to_owned())
+            .map(|s| s.to_string())
             .collect::<Vec<String>>(),
     );
-    command
+    commands
 }
 
 fn process_alias(alias: &str) -> &str {
@@ -318,8 +314,8 @@ fn directory_selector_prompt(format_string: &str) -> String {
                 'm' => res.push_str(MAGENTA),
                 'c' => res.push_str(CYAN),
                 'w' => res.push_str(WHITE),
-                'S' => res.push_str(&getcwd()),
                 's' => res.push_str(&getcwd_short()),
+                'S' => res.push_str(&getcwd()),
                 '%' => res.push('%'),
                 c => res.push(c),
             }
@@ -444,15 +440,13 @@ fn parse(string: &String, commands: &[String], parse_invalid: bool) -> Vec<Token
             if !buffer.is_empty() {
                 if commands.contains(&buffer) && is_first_command && no_text_token {
                     tokens.push(if parse_invalid {
-                        Token::InvalidCommand(buffer.clone())
+                        Token::InvalidCommand(take(&mut buffer))
                     } else {
-                        Token::Command(buffer.clone())
+                        Token::Command(take(&mut buffer))
                     });
-                    buffer.clear();
                     is_first_command = false;
                 } else {
-                    tokens.push(Token::Text(buffer.clone()));
-                    buffer.clear();
+                    tokens.push(Token::Text(take(&mut buffer)));
                     no_text_token = false;
                 }
             }
@@ -464,14 +458,12 @@ fn parse(string: &String, commands: &[String], parse_invalid: bool) -> Vec<Token
     if !buffer.is_empty() {
         if commands.contains(&buffer) && is_first_command && no_text_token {
             if parse_invalid {
-                tokens.push(Token::InvalidCommand(buffer.clone()))
+                tokens.push(Token::InvalidCommand(take(&mut buffer)))
             } else {
-                tokens.push(Token::Command(buffer.clone()));
+                tokens.push(Token::Command(take(&mut buffer)));
             }
-            buffer.clear();
         } else {
-            tokens.push(Token::Text(buffer.clone()));
-            buffer.clear();
+            tokens.push(Token::Text(take(&mut buffer)));
         }
     }
     tokens

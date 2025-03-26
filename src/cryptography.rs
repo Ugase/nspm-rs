@@ -80,7 +80,7 @@ pub fn generate_salt(
 /// let master = b"p";
 /// encrypt(b"p", master, salt);
 /// ```
-pub fn encrypt(pwd: &[u8], master_pwd: &[u8], salt: SaltString) -> String {
+pub fn encrypt(pwd: &[u8], master_pwd: &[u8], salt: &SaltString) -> String {
     let mut key = [0u8; KEY_LENGTH];
     let buffer = pwd;
     let argon = Argon2::new_with_secret(
@@ -106,14 +106,14 @@ pub fn encrypt(pwd: &[u8], master_pwd: &[u8], salt: SaltString) -> String {
 /// use argon2::password_hash::SaltString;
 /// let salt = SaltString::from_b64("/NQctu0+XVTdWle/+JlMdT2lE+wIxELEHqIBebsypek").unwrap();
 /// let master = b"p";
-/// let fernet_encrypted = encrypt(b"p", master, salt.clone());
-/// decrypt(fernet_encrypted.as_bytes(), master, salt);
+/// let fernet_encrypted = encrypt(b"p", master, &salt);
+/// decrypt(fernet_encrypted.as_bytes(), master, &salt);
 /// ```
 ///
 /// # Panics
 ///
 /// Panics if master_pwd is not correct.
-pub fn decrypt(pwd: &[u8], master_pwd: &[u8], salt: SaltString) -> Result<SecretString, String> {
+pub fn decrypt(pwd: &[u8], master_pwd: &[u8], salt: &SaltString) -> Result<SecretString, String> {
     let mut key = [0u8; KEY_LENGTH];
     let buffer = pwd;
     let argon = Argon2::new_with_secret(
